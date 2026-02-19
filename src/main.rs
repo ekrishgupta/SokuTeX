@@ -40,6 +40,8 @@ async fn main() {
     render_pdf(&mut state, &pdf_renderer, &pdf_data);
     let mut palette = palette::CommandPalette::new();
 
+    let mut modifiers = winit::event::Modifiers::default();
+
     event_loop.run(|event, target| {
         target.set_control_flow(ControlFlow::Poll);
 
