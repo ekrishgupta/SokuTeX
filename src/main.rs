@@ -45,6 +45,84 @@ async fn main() {
     let daemon = compiler_daemon::CompilerDaemon::new(compile_rx, vfs.clone());
     tokio::spawn(daemon.run());
 
+    // Compile Debouncer
+    let (debounce_tx, mut debounce_rx) = tokio::sync::mpsc::channel::<(String, crate::config::CompileBackend, bool)>(10);
+    let compile_tx_clone = compile_tx.clone();
+    let result_tx_clone = result_tx.clone();
+    tokio::spawn(async move {
+        let mut last_req = None;
+        let sleep = tokio::time::sleep(std::time::Duration::from_millis(150));
+        tokio::pin!(sleep);
+        
+        loop {
+            tokio::select! {
+                req = debounce_rx.recv() => {
+                    match req {
+                        Some(r) => {
+                            last_req = Some(r);
+                            sleep.as_mut().reset(tokio::time::Instant::now() + std::time::Duration::from_millis(150));
+                        }
+                        None => break,
+                    }
+                }
+                _ = &mut sleep, if last_req.is_some() => {
+                    if let Some((text, backend, draft)) = last_req.take() {
+                        let (otx, orx) = tokio::sync::oneshot::channel();
+                        use crate::compiler_daemon::CompileRequest;
+                        if compile_tx_clone.send(CompileRequest::Compile { 
+                            latex: text, 
+                            backend, 
+                            draft,
+                            response: otx 
+                        }).await.is_ok() {
+                            if let Ok(pdf) = orx.await {
+                                let _ = result_tx_clone.send(pdf).await;
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    });
+
+    let event_loop = EventLoop::new().unwrap();
+    let window = WindowBuilder::new()
+        .with_title("SokuTeX")
+        .with_transparent(true)
+        .with_fullsize_content_view(true)
+        .with_titlebar_transparent(true)
+        .with_title_hidden(true)
+        .build(&event_loop)
+        .unwrap();
+
+    let mut state = renderer::State::new(&window).await;
+
+    // Start File Watcher
+    let (file_tx, mut file_rx) = tokio::sync::mpsc::channel(10);
+    let mut watcher = watcher::FileWatcher::new(file_tx).expect("Failed to setup file watcher");
+    watcher.watch(".").expect("Failed to start watching directory");
+    
+    // Initialize PDF Renderer with the workspace preview
+    let pdf_renderer = std::sync::Arc::new(PdfRenderer::new().expect("Failed to initialize PdfRenderer"));
+    let mut current_pdf_data = std::sync::Arc::new(std::fs::read("workspace_preview.pdf").expect("Failed to read workspace_preview.pdf"));
+    let mut current_pdf_revision = 0u64;
+
+    // PDF Render Channel
+    let (pdf_tx, mut pdf_rx) = tokio::sync::mpsc::channel::<(u32, u32, Vec<u8>)>(2);
+
+    let request_render = |pdf_renderer: std::sync::Arc<PdfRenderer>, pdf_data: std::sync::Arc<Vec<u8>>, revision: u64, width: u16, height: u16, tx: tokio::sync::mpsc::Sender<(u32, u32, Vec<u8>)>| {
+        tokio::task::spawn_blocking(move || {
+            let timer = perf::PerfTimer::start("PDF Render (Async)");
+            if let Ok(pixels) = pdf_renderer.render_page(&pdf_data, revision, 0, width, height) {
+                let _ = tx.blocking_send((width as u32, height as u32, pixels));
+            }
+            timer.stop();
+        });
+    };
+
+    request_render(pdf_renderer.clone(), current_pdf_data.clone(), current_pdf_revision, state.size.width as u16, state.size.height as u16, pdf_tx.clone());
+    let mut palette = palette::CommandPalette::new();
+
     let mut gui = ui::Gui::new();
     ui::Gui::setup_visuals(&state.egui_ctx);
 
