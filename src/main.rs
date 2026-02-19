@@ -221,17 +221,9 @@ async fn main() {
                             }
 
                             // Lazy pre-render adjacent pages
-                            let renderer = pdf_renderer.clone();
-                            let pdf = current_pdf_data.clone();
-                            let revision = current_pdf_revision;
-                            let width = state.size.width as u16;
-                            let height = state.size.height as u16;
-                            tokio::spawn(async move {
-                                // Render next few pages into cache
-                                for i in 1..5 {
-                                    let _ = renderer.render_page(&pdf, revision, i, width, height);
-                                }
-                            });
+                            for i in 1..5 {
+                                render_pdf(pdf_renderer.clone(), current_pdf_data.clone(), current_pdf_revision, i, state.size.width as u16, state.size.height as u16, None);
+                            }
                         }
 
                         // Check for external file changes
