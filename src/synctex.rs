@@ -2,6 +2,7 @@ use std::path::{Path, PathBuf};
 use ahash::AHashMap;
 use std::fs::File;
 use std::io::{BufRead, BufReader};
+use flate2::read::GzDecoder;
 
 #[derive(Debug, Clone)]
 pub struct SyncTexNode {
@@ -32,9 +33,17 @@ impl SyncTex {
     }
 
     pub fn load<P: AsRef<Path>>(&mut self, path: P) -> std::io::Result<()> {
+        let path = path.as_ref();
         let file = File::open(path)?;
-        let reader = BufReader::new(file);
+        
+        if path.extension().map_or(false, |ext| ext == "gz") {
+            self.load_from_reader(BufReader::new(GzDecoder::new(file)))
+        } else {
+            self.load_from_reader(BufReader::new(file))
+        }
+    }
 
+    pub fn load_from_reader<R: BufRead>(&mut self, reader: R) -> std::io::Result<()> {
         let mut current_page = 0;
         let mut in_content = false;
 
@@ -57,8 +66,6 @@ impl SyncTex {
             } else if line.starts_with('}') {
                 in_content = false;
             } else if in_content {
-                // Parse node lines like 'v1,12:100,200:10,20,5'
-                // Boxes start with [, (, v, h, x, k, g
                 let first_char = line.chars().next().unwrap_or(' ');
                 if "[(vhxkg".contains(first_char) {
                     self.parse_node(&line, current_page);
@@ -73,11 +80,9 @@ impl SyncTex {
     }
 
     fn parse_node(&mut self, line: &str, page: u32) {
-        // Simple regex-less parsing: skip command char, then split by ',' and ':'
         let content = &line[1..];
         let parts: Vec<&str> = content.split(|c| c == ',' || c == ':').collect();
         
-        // Expected parts for a typical node: tag, line, x, y, width, height, depth
         if parts.len() >= 5 {
             let tag = parts[0].parse().unwrap_or(0);
             let line_num = parts[1].parse().unwrap_or(0);
@@ -99,7 +104,7 @@ impl SyncTex {
             self.nodes.push(SyncTexNode {
                 tag,
                 line: line_num,
-                column: 0, // SyncTex usually doesn't provide column unless specifically configured
+                column: 0,
                 x,
                 y,
                 width,
@@ -110,27 +115,21 @@ impl SyncTex {
         }
     }
 
-    /// Forward sync: find PDF location from source line
     pub fn forward_sync(&self, target_line: u32, target_tag: u32) -> Option<&SyncTexNode> {
         self.nodes.iter()
             .filter(|n| n.tag == target_tag && n.line >= target_line)
             .min_by_key(|n| n.line)
     }
 
-    /// Backward sync: find source line from PDF location
     pub fn backward_sync(&self, page: u32, x: f32, y: f32) -> Option<&SyncTexNode> {
-        // Find node containing the point, or closest to it
         self.nodes.iter()
             .filter(|n| n.page == page)
             .filter(|n| {
-                // Nodes in SyncTex are often just point-references or boxes
-                // We check if (x,y) is within the box [x, y-height, x+width, y+depth]
                 x >= n.x && x <= (n.x + n.width) &&
                 y >= (n.y - n.height) && y <= (n.y + n.depth)
             })
             .next()
             .or_else(|| {
-                // Fallback: closest node on the same page
                 self.nodes.iter()
                     .filter(|n| n.page == page)
                     .min_by_key(|n| {
@@ -141,4 +140,5 @@ impl SyncTex {
             })
     }
 }
+
 
