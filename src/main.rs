@@ -58,7 +58,7 @@ async fn main() {
                     } => target.exit(),
                     WindowEvent::Resized(physical_size) => {
                         state.resize(*physical_size);
-                        // TODO: Re-render PDF on resize?
+                        render_pdf(&mut state, &pdf_renderer, &pdf_data);
                     }
                     WindowEvent::ScaleFactorChanged { .. } => {}
                     WindowEvent::RedrawRequested => {
