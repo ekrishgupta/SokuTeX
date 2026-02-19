@@ -3,6 +3,7 @@ use ahash::AHashMap;
 use regex::Regex;
 use crate::vfs::Vfs;
 use crate::config::CompileBackend;
+use crate::bib::BibParser;
 use std::hash::{Hash, Hasher};
 use std::collections::HashSet;
 use log::info;
@@ -11,11 +12,14 @@ use std::sync::OnceLock;
 
 static INCLUDE_REGEX: OnceLock<Regex> = OnceLock::new();
 static INCLUDE_INPUT_REGEX: OnceLock<Regex> = OnceLock::new();
+static BIB_REGEX: OnceLock<Regex> = OnceLock::new();
+static BIBRESOURCE_REGEX: OnceLock<Regex> = OnceLock::new();
 
 pub struct Compiler {
     cache: AHashMap<u64, Vec<u8>>,
     backend: CompileBackend,
     file_hashes: AHashMap<String, u64>,
+    bib_cache: AHashMap<String, (u64, Vec<String>)>,
     pub active_file: Option<String>,
 }
 
@@ -25,6 +29,7 @@ impl Compiler {
             cache: AHashMap::new(),
             backend: CompileBackend::Internal,
             file_hashes: AHashMap::new(),
+            bib_cache: AHashMap::new(),
             active_file: None,
         }
     }
@@ -33,8 +38,46 @@ impl Compiler {
         self.backend = backend;
     }
 
-    pub fn compile(&mut self, latex: &str, draft: bool, vfs: &Vfs) -> Result<Vec<u8>, Box<dyn Error>> {
-        let (optimized_latex, _) = self.optimize_latex(latex, draft, vfs);
+    pub fn update_bib_cache(&mut self, latex: &str, vfs: &Vfs) {
+        let bib_re = BIB_REGEX.get_or_init(|| Regex::new(r"\\bibliography\{([^}]+)\}").unwrap());
+        let bibresource_re = BIBRESOURCE_REGEX.get_or_init(|| Regex::new(r"\\addbibresource\{([^}]+)\}").unwrap());
+
+        let mut bib_files = Vec::new();
+        for cap in bib_re.captures_iter(latex) {
+            for file in cap[1].split(',') {
+                let mut f = file.trim().to_string();
+                if !f.ends_with(".bib") { f.push_str(".bib"); }
+                bib_files.push(f);
+            }
+        }
+        for cap in bibresource_re.captures_iter(latex) {
+            bib_files.push(cap[1].trim().to_string());
+        }
+
+        for path in bib_files {
+            if let Some(content_bytes) = vfs.read_file(&path) {
+                let mut hasher = ahash::AHasher::default();
+                content_bytes.hash(&mut hasher);
+                let hash = hasher.finish();
+
+                let needs_update = match self.bib_cache.get(&path) {
+                    Some((old_hash, _)) => *old_hash != hash,
+                    None => true,
+                };
+
+                if needs_update {
+                    info!("Updating BibTeX cache for {}", path);
+                    let content = String::from_utf8_lossy(&content_bytes);
+                    let entries = BibParser::parse(&content);
+                    let keys: Vec<String> = entries.into_iter().map(|e| e.key).collect();
+                    self.bib_cache.insert(path, (hash, keys));
+                }
+            }
+        }
+    }
+
+    pub fn compile(&mut self, latex: &str, draft: bool, focus_mode: bool, vfs: &Vfs) -> Result<Vec<u8>, Box<dyn Error>> {
+        let (optimized_latex, _) = self.optimize_latex(latex, draft, focus_mode, vfs);
 
         // 3. Cache Check
         let mut hasher = ahash::AHasher::default();
@@ -62,7 +105,7 @@ impl Compiler {
     }
 
     /// Extracted optimization logic for use in external compilation flows (like Latexmk)
-    pub fn optimize_latex(&mut self, latex: &str, draft: bool, vfs: &Vfs) -> (String, bool) {
+    pub fn optimize_latex(&mut self, latex: &str, draft: bool, focus_mode: bool, vfs: &Vfs) -> (String, bool) {
         // 1. Identify all top-level \include units
         let include_re = INCLUDE_REGEX.get_or_init(|| Regex::new(r"\\include\{([^}]+)\}").unwrap());
         let top_level_units: Vec<String> = include_re
@@ -81,6 +124,15 @@ impl Compiler {
         // We could optimize by only scanning if we haven't scanned recently
         let mut all_known_files = Vec::new();
         self.collect_all_dependencies("main.tex", vfs, &mut all_known_files, &mut HashSet::new());
+
+        // Update BibTeX cache for all dependencies
+        self.update_bib_cache(latex, vfs);
+        for path in &all_known_files {
+            if let Some(content) = vfs.read_file(path) {
+                let content_str = String::from_utf8_lossy(&content);
+                self.update_bib_cache(&content_str, vfs);
+            }
+        }
 
         for path in all_known_files {
             if let Some(content) = vfs.read_file(&path) {
@@ -116,13 +168,33 @@ impl Compiler {
             }
         }
 
-        // 4. Priority: If we have an active file and it's in an include unit, we can just compile that
+        // 4. Focus Mode & Priority logic
         if let Some(ref active) = self.active_file {
             let active_base = active.strip_suffix(".tex").unwrap_or(active);
             if top_level_units.iter().any(|u| u == active_base) {
-                // If we are actively editing an include unit, it's the primary candidate for includeonly
-                if !affected_units.contains(&active_base.to_string()) {
-                    affected_units.push(active_base.to_string());
+                if focus_mode {
+                    // Power User Focus Mode: Ignore other changes, focus only on active unit + bibliography
+                    info!("Focus Mode: concentrating on unit {}", active_base);
+                    affected_units = vec![active_base.to_string()];
+
+                    // Auto-include bibliography units if they exist
+                    for unit in &top_level_units {
+                        let unit_path = if unit.ends_with(".tex") { unit.clone() } else { format!("{}.tex", unit) };
+                        if let Some(content) = vfs.read_file(&unit_path) {
+                            let content_str = String::from_utf8_lossy(&content);
+                            if content_str.contains("\\bibliography") || content_str.contains("\\printbibliography") {
+                                if !affected_units.contains(unit) {
+                                    info!("Focus Mode: auto-including bibliography unit {}", unit);
+                                    affected_units.push(unit.clone());
+                                }
+                            }
+                        }
+                    }
+                } else {
+                    // Standard Incremental: If we are actively editing an include unit, it's the primary candidate for includeonly
+                    if !affected_units.contains(&active_base.to_string()) {
+                        affected_units.push(active_base.to_string());
+                    }
                 }
             }
         }
