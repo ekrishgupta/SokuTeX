@@ -116,13 +116,18 @@ impl Gui {
             .width_range(160.0..=160.0)
             .frame(egui::Frame::none().fill(Color32::from_rgb(13, 15, 17)))
             .show(ctx, |ui| {
-                ui.add_space(24.0);
-                ui.horizontal(|ui| {
-                    ui.add_space(24.0);
-                    ui.label(RichText::new("SokuTeX")
-                        .font(FontId::new(16.0, egui::FontFamily::Name("logo_font".into())))
-                        .color(Color32::WHITE));
-                });
+                // Branding Area - Aligned with traffic lights
+                egui::Frame::none()
+                    .inner_margin(egui::Margin { left: 16.0, right: 16.0, top: 12.0, bottom: 4.0 })
+                    .show(ui, |ui| {
+                        ui.horizontal(|ui| {
+                            ui.add_space(64.0); // Clear traffic lights
+                            ui.label(RichText::new("SokuTeX")
+                                .font(FontId::new(16.0, egui::FontFamily::Name("logo_font".into())))
+                                .color(Color32::WHITE)
+                                .extra_letter_spacing(0.1));
+                        });
+                    });
 
                 ui.add_space(32.0);
                 ui.vertical(|ui| {
