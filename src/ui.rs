@@ -118,7 +118,26 @@ impl Gui {
             dependency_tree: None,
             show_dependencies: true,
             show_bib_panel: false,
-            bib_entries: Vec::new(),
+            bib_entries: crate::bib::BibParser::parse(r#"
+@article{einstein1905,
+  author = {Einstein, Albert},
+  title = {On the Electrodynamics of Moving Bodies},
+  journal = {Annalen der Physik},
+  year = {1905}
+}
+@book{knuth1984,
+  author = {Knuth, Donald E.},
+  title = {The TeXbook},
+  year = {1984},
+  publisher = {Addison-Wesley}
+}
+@article{shannon1948,
+  author = {Shannon, Claude E.},
+  title = {A Mathematical Theory of Communication},
+  journal = {Bell System Technical Journal},
+  year = {1948}
+}
+"#),
             bib_search: String::new(),
             synctex: None,
             sync_to_editor_request: None,
@@ -723,6 +742,10 @@ impl Gui {
                             if ui.button(RichText::new("TREE").size(9.0).strong()).clicked() {
                                 self.show_dependencies = !self.show_dependencies;
                             }
+
+                            if ui.button(RichText::new("BIB").size(9.0).strong()).clicked() {
+                                self.show_bib_panel = !self.show_bib_panel;
+                            }
                         });
                     });
                 
@@ -889,6 +912,16 @@ impl Gui {
                             }
                         }
                     });
+
+                if self.show_bib_panel {
+                    egui::SidePanel::right("bib_sidebar")
+                        .resizable(true)
+                        .default_width(280.0)
+                        .frame(egui::Frame::none().fill(Color32::from_rgb(15, 17, 20)))
+                        .show_inside(ui, |ui| {
+                            self.draw_bib_panel(ui);
+                        });
+                }
             });
 
         egui::CentralPanel::default()
@@ -981,6 +1014,76 @@ impl Gui {
                 }
             });
         }
+    }
+
+    fn draw_bib_panel(&mut self, ui: &mut egui::Ui) {
+        ui.add_space(12.0);
+        ui.horizontal(|ui| {
+            ui.add_space(16.0);
+            ui.label(RichText::new("BIBLIOGRAPHY").size(10.0).color(Color32::from_rgb(100, 110, 120)).strong());
+        });
+        ui.add_space(8.0);
+
+        // Search bar
+        egui::Frame::none()
+            .fill(Color32::from_rgb(25, 28, 32))
+            .rounding(4.0)
+            .inner_margin(egui::Margin::symmetric(8.0, 4.0))
+            .show(ui, |ui| {
+                ui.horizontal(|ui| {
+                    ui.label(RichText::new("🔍").size(10.0));
+                    ui.add(egui::TextEdit::singleline(&mut self.bib_search)
+                        .hint_text("Search references...")
+                        .frame(false)
+                        .desired_width(f32::INFINITY));
+                });
+            });
+
+        ui.add_space(8.0);
+        ui.separator();
+
+        egui::ScrollArea::vertical().show(ui, |ui| {
+            let search = self.bib_search.to_lowercase();
+            for entry in &self.bib_entries {
+                let matches = search.is_empty() || 
+                    entry.key.to_lowercase().contains(&search) ||
+                    entry.author.as_ref().map(|a| a.to_lowercase().contains(&search)).unwrap_or(false) ||
+                    entry.title.as_ref().map(|t| t.to_lowercase().contains(&search)).unwrap_or(false);
+
+                if matches {
+                    let response = egui::Frame::none()
+                        .inner_margin(egui::Margin::symmetric(12.0, 8.0))
+                        .show(ui, |ui| {
+                            ui.vertical(|ui| {
+                                ui.horizontal(|ui| {
+                                    ui.label(RichText::new(&entry.key).color(Color32::from_rgb(60, 120, 220)).strong().size(11.0));
+                                    ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
+                                        ui.label(RichText::new(&entry.entry_type).size(9.0).color(Color32::from_rgb(80, 85, 95)));
+                                    });
+                                });
+                                if let Some(title) = &entry.title {
+                                    ui.label(RichText::new(title).size(12.0).color(Color32::WHITE));
+                                }
+                                if let Some(author) = &entry.author {
+                                    ui.label(RichText::new(author).size(10.0).color(Color32::from_rgb(120, 130, 140)));
+                                }
+                            });
+                        }).response;
+
+                    let response = response.interact(egui::Sense::click());
+                    if response.hovered() {
+                        ui.painter().rect_filled(response.rect, 2.0, Color32::from_rgb(30, 35, 45));
+                        ui.output_mut(|o| o.cursor_icon = egui::CursorIcon::PointingHand);
+                    }
+
+                    if response.clicked() {
+                        let cite = format!("\\cite{{{}}}", entry.key);
+                        // Simple insertion at the end of the current buffer for now
+                        self.ui_text.push_str(&cite);
+                    }
+                }
+            }
+        });
     }
 }
 
