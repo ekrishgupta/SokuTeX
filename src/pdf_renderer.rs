@@ -18,14 +18,15 @@ impl PdfRenderer {
         let pages = document.pages();
         let page = pages.get(page_index)?;
         
-        // Render to a bitmap
-        let bitmap = page.render(width, height, None)?;
-        
-        // Extract bytes (BGRA usually, might need conversion for wgpu RGBA)
-        // Pdfium usually renders BGRA or BGRx on desktop.
-        let bytes = bitmap.as_bytes();
-        
-        // Simple copy for now, we might need swizzling later.
-        Ok(bytes.to_vec())
+        let render_config = PdfRenderConfig::new()
+            .set_target_width(width as i32)
+            .set_target_height(height as i32)
+            .rotate_if_landscape(PdfPageRenderRotation::None, true); // Keep consistent
+
+        let bitmap = page.render_with_config(&render_config)?;
+
+        // Extract bytes
+        let bytes = bitmap.as_raw_bytes(); 
+        Ok(bytes.to_vec()) 
     }
 }
