@@ -7,6 +7,7 @@ use std::path::PathBuf;
 use std::sync::Arc;
 use tokio::fs;
 use log::{info, error};
+use std::hash::Hash;
 
 pub struct CompileResult {
     pub pdf: Vec<u8>,

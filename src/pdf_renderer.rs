@@ -66,7 +66,7 @@ impl PdfRenderer {
         
         // Matrix for scaling AND translating to the tile's origin
         let mut matrix = Matrix::new_scale(scale_x, scale_y);
-        matrix = matrix.pre_translate(-(tile_x as f32), -(tile_y as f32));
+        matrix.pre_translate(-(tile_x as f32), -(tile_y as f32));
         
         let colorspace = Colorspace::device_rgb();
         
