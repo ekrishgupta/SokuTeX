@@ -62,9 +62,10 @@ async fn main() {
                     } => match logical_key {
                         Key::Named(NamedKey::Escape) => target.exit(),
                         Key::Character(c) if c == "p" => {
-                            // TODO check for cmd/ctrl
-                            palette.toggle();
-                            println!("Palette visible: {}", palette.visible);
+                            if modifiers.state().super_key() || modifiers.state().control_key() {
+                                palette.toggle();
+                                println!("Palette visible: {}", palette.visible);
+                            }
                         }
                         _ => {}
                     },
