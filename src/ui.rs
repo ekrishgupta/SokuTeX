@@ -65,9 +65,14 @@ pub struct Gui {
     pub compile_backend: crate::config::CompileBackend,
     pub dependency_tree: Option<DependencyNode>,
     pub show_dependencies: bool,
+    pub show_bib_panel: bool,
+    pub bib_entries: Vec<crate::bib::BibEntry>,
+    pub bib_search: String,
     pub synctex: Option<crate::synctex::SyncTex>,
-    pub sync_to_editor_request: Option<u32>, // line to scroll to
+    pub sync_to_editor_request: Option<usize>, // line to scroll to
     pub sync_to_pdf_request: bool,
+    pub pdf_scroll_target: Option<(usize, f32, f32)>, // (page, x, y)
+    pub pdf_highlight_rect: Option<egui::Rect>,
 }
 
 impl Gui {
@@ -110,9 +115,14 @@ impl Gui {
             compile_backend: crate::config::CompileBackend::Internal,
             dependency_tree: None,
             show_dependencies: true,
+            show_bib_panel: false,
+            bib_entries: Vec::new(),
+            bib_search: String::new(),
             synctex: None,
             sync_to_editor_request: None,
             sync_to_pdf_request: false,
+            pdf_scroll_target: None,
+            pdf_highlight_rect: None,
         }
     }
 
@@ -175,7 +185,7 @@ impl Gui {
             self.compile_timer = std::time::Instant::now();
         }
         
-        if self.ui_text != self.last_compile_text && self.compile_timer.elapsed().as_millis() > 300 {
+        if self.ui_text != self.last_compile_text && self.compile_timer.elapsed().as_millis() > 0 {
             self.compile_requested = true;
         }
         
@@ -786,6 +796,11 @@ impl Gui {
                                     ui.fonts(|f| f.layout_job(layout_job))
                                 })
                         );
+
+                        if resp.double_clicked() {
+                            self.sync_to_pdf_request = true;
+                        }
+
                         if let Some(state) = egui::TextEdit::load_state(ui.ctx(), resp.id) {
                             // Simple prefix matching based on cursor
                             let char_idx = state.ccursor_range().map(|r| r.primary.index).unwrap_or(0);
@@ -817,6 +832,40 @@ impl Gui {
                                     }
                                 }
                             }
+
+                            // Handle Forward Sync
+                            if self.sync_to_pdf_request {
+                                self.sync_to_pdf_request = false;
+                                if let Some(ref stx) = self.synctex {
+                                    // 07. Calculate line number from char index
+                                    let mut line_num = 1;
+                                    let mut current_idx = 0;
+                                    for line in self.ui_text.lines() {
+                                        let line_len = line.len();
+                                        if current_idx + line_len >= char_idx {
+                                            break;
+                                        }
+                                        current_idx += line_len + 1; // +1 for newline
+                                        line_num += 1;
+                                    }
+                                    
+                                    if let Some(node) = stx.forward_sync(line_num, 1) {
+                                        self.pdf_scroll_target = Some((node.page, node.x, node.y));
+                                        
+                                        // Calculate highlight rect (Letter size: 612 x 792)
+                                        let x_ratio = node.x / 612.0;
+                                        let y_ratio = node.y / 792.0;
+                                        let w_ratio = node.width / 612.0;
+                                        let h_ratio = node.height / 792.0;
+                                        let d_ratio = node.depth / 792.0;
+                                        
+                                        self.pdf_highlight_rect = Some(egui::Rect::from_min_size(
+                                            egui::pos2(x_ratio, y_ratio - h_ratio),
+                                            egui::vec2(w_ratio, h_ratio + d_ratio)
+                                        ));
+                                    }
+                                }
+                            }
                         }
                     });
             });
@@ -828,6 +877,15 @@ impl Gui {
                     let image_size = ui.available_size();
                     let response = ui.image(egui::load::SizedTexture::new(tex_id, image_size));
                     
+                    // Render SyncTeX highlight
+                    if let Some(rect_ratio) = self.pdf_highlight_rect {
+                        let screen_rect = egui::Rect::from_min_size(
+                            response.rect.min + egui::vec2(rect_ratio.min.x * image_size.x, rect_ratio.min.y * image_size.y),
+                            egui::vec2(rect_ratio.width() * image_size.x, rect_ratio.height() * image_size.y)
+                        );
+                        ui.painter().rect_filled(screen_rect, 0.0, Color32::from_rgba_unmultiplied(255, 255, 0, 80));
+                    }
+
                     if response.double_clicked() {
                         if let Some(pos) = response.interact_pointer_pos() {
                             let relative_pos = pos - response.rect.min;
@@ -835,16 +893,24 @@ impl Gui {
                             let y_ratio = relative_pos.y / image_size.y;
                             
                             if let Some(ref stx) = self.synctex {
-                                // PDF coordinates are usually in points (1/72 inch).
-                                // SyncTeX also uses points, but sometimes scaled.
-                                // We assume the PDF renderer output matches the PDF page size.
-                                // In a more robust implementation, we'd need page dimensions.
-                                // For now, let's assume standard A4 or Letter (around 600-800 points).
-                                let pdf_x = x_ratio * 612.0; // Assume Letter width
-                                let pdf_y = y_ratio * 792.0; // Assume Letter height
+                                // PDF coordinates (Letter: 612 x 792)
+                                let pdf_x = x_ratio * 612.0;
+                                let pdf_y = y_ratio * 792.0;
                                 
                                 if let Some(node) = stx.backward_sync(1, pdf_x, pdf_y) {
-                                    self.sync_to_editor_request = Some(node.line);
+                                    self.sync_to_editor_request = Some(node.line as usize);
+                                    
+                                    // Update highlight for inverse sync too
+                                    let x_ratio = node.x / 612.0;
+                                    let y_ratio = node.y / 792.0;
+                                    let w_ratio = node.width / 612.0;
+                                    let h_ratio = node.height / 792.0;
+                                    let d_ratio = node.depth / 792.0;
+                                    
+                                    self.pdf_highlight_rect = Some(egui::Rect::from_min_size(
+                                        egui::pos2(x_ratio, y_ratio - h_ratio),
+                                        egui::vec2(w_ratio, h_ratio + d_ratio)
+                                    ));
                                 }
                             }
                         }
