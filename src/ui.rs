@@ -712,7 +712,8 @@ impl Gui {
                             ui.spacing_mut().button_padding = egui::vec2(10.0, 3.0);
                             if ui.button(RichText::new("COMP").size(9.0).strong()).clicked() {
                                 self.compile_status = "BUSY".to_string();
-                                self.show_errors = !self.show_errors; // Toggle for demo
+                                self.draft_mode = false; // Demand a full render
+                                self.compile_requested = true;
                             }
                             
                             let draft_text = if self.draft_mode { "DRAFT: ON" } else { "DRAFT: OFF" };
@@ -831,7 +832,7 @@ impl Gui {
                             self.sync_to_pdf_request = true;
                         }
 
-                        if let Some(line) = self.sync_to_editor_request {
+                        if let Some(line) = self.sync_to_editor_request.take() {
                             if let Some(mut state) = egui::TextEdit::load_state(ui.ctx(), resp.id) {
                                 let mut char_idx = 0;
                                 for (i, l) in self.ui_text.lines().enumerate() {
@@ -840,6 +841,15 @@ impl Gui {
                                     }
                                     char_idx += l.len() + 1;
                                 }
+                                let ccursor = egui::text::CCursor::new(char_idx);
+                                state.cursor.set_char_range(Some(egui::text::CCursorRange::one(ccursor)));
+                                state.store(ui.ctx(), resp.id);
+                                ui.ctx().memory_mut(|m| m.request_focus(resp.id));
+                            }
+                        }
+
+                        if let Some(char_idx) = self.cursor_override.take() {
+                            if let Some(mut state) = egui::TextEdit::load_state(ui.ctx(), resp.id) {
                                 let ccursor = egui::text::CCursor::new(char_idx);
                                 state.cursor.set_char_range(Some(egui::text::CCursorRange::one(ccursor)));
                                 state.store(ui.ctx(), resp.id);
