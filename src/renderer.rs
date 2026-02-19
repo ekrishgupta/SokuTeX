@@ -1,4 +1,11 @@
 use winit::window::Window;
+use bytemuck::{Pod, Zeroable};
+
+#[repr(C)]
+#[derive(Copy, Clone, Debug, Pod, Zeroable)]
+pub struct PdfUniforms {
+    pub transform: [[f32; 4]; 4],
+}
 
 use winit::window::Window;
 use bytemuck::{Pod, Zeroable};
@@ -336,6 +343,11 @@ impl<'a> State<'a> {
                 size,
             );
         }
+    }
+
+    pub fn update_uniforms(&mut self, transform: [[f32; 4]; 4]) {
+        self.uniforms.transform = transform;
+        self.queue.write_buffer(&self.uniform_buffer, 0, bytemuck::cast_slice(&[self.uniforms]));
     }
 
     pub fn update_uniforms(&mut self, transform: [[f32; 4]; 4]) {
