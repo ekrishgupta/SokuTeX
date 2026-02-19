@@ -801,6 +801,22 @@ impl Gui {
                             self.sync_to_pdf_request = true;
                         }
 
+                        if let Some(line) = self.sync_to_editor_request {
+                            if let Some(mut state) = egui::TextEdit::load_state(ui.ctx(), resp.id) {
+                                let mut char_idx = 0;
+                                for (i, l) in self.ui_text.lines().enumerate() {
+                                    if i + 1 == line {
+                                        break;
+                                    }
+                                    char_idx += l.len() + 1;
+                                }
+                                let ccursor = egui::text::CCursor::new(char_idx);
+                                state.set_ccursor_range(Some(egui::text::CCursorRange::one(ccursor)));
+                                state.store(ui.ctx(), resp.id);
+                                ui.ctx().memory_mut(|m| m.request_focus(resp.id));
+                            }
+                        }
+
                         if let Some(state) = egui::TextEdit::load_state(ui.ctx(), resp.id) {
                             // Simple prefix matching based on cursor
                             let char_idx = state.ccursor_range().map(|r| r.primary.index).unwrap_or(0);
