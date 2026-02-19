@@ -73,6 +73,8 @@ pub struct Gui {
     pub sync_to_pdf_request: bool,
     pub pdf_scroll_target: Option<(usize, f32, f32)>, // (page, x, y)
     pub pdf_highlight_rect: Option<egui::Rect>,
+    pub active_file_path: String,
+    pub file_change_request: Option<String>,
 }
 
 impl Gui {
@@ -123,6 +125,8 @@ impl Gui {
             sync_to_pdf_request: false,
             pdf_scroll_target: None,
             pdf_highlight_rect: None,
+            active_file_path: "main.tex".to_string(),
+            file_change_request: None,
         }
     }
 
@@ -739,8 +743,9 @@ impl Gui {
                             ui.add_space(8.0);
                             
                             egui::ScrollArea::vertical().show(ui, |ui| {
-                                if let Some(ref tree) = self.dependency_tree {
-                                    self.render_node_recursive(ui, tree);
+                                let tree = self.dependency_tree.clone();
+                                if let Some(tree) = tree {
+                                    self.render_node_recursive(ui, &tree);
                                 } else {
                                     ui.horizontal(|ui| {
                                         ui.add_space(16.0);
@@ -939,27 +944,41 @@ impl Gui {
             });
     }
 
-    fn render_node_recursive(&self, ui: &mut egui::Ui, node: &DependencyNode) {
+    fn render_node_recursive(&mut self, ui: &mut egui::Ui, node: &DependencyNode) {
         let has_children = !node.children.is_empty();
         
+        let is_active = self.active_file_path == node.name;
+        let color = if is_active {
+            Color32::from_rgb(100, 160, 255)
+        } else if has_children {
+            Color32::WHITE
+        } else {
+            Color32::from_rgb(160, 170, 180)
+        };
+
         let label = RichText::new(format!("📄 {}", node.name))
             .size(12.0)
-            .color(if has_children { Color32::WHITE } else { Color32::from_rgb(160, 170, 180) });
+            .color(color);
 
         if has_children {
             egui::collapsing_header::CollapsingState::load_with_default_open(ui.ctx(), ui.make_persistent_id(&node.name), true)
                 .show_header(ui, |ui| {
-                    ui.label(label);
+                    if ui.selectable_label(is_active, label).clicked() {
+                        self.file_change_request = Some(node.name.clone());
+                    }
                 })
                 .body(|ui| {
-                    for child in &node.children {
-                        self.render_node_recursive(ui, child);
+                    for i in 0..node.children.len() {
+                        let child = node.children[i].clone();
+                        self.render_node_recursive(ui, &child);
                     }
                 });
         } else {
             ui.horizontal(|ui| {
                 ui.add_space(16.0);
-                ui.label(label);
+                if ui.selectable_label(is_active, label).clicked() {
+                    self.file_change_request = Some(node.name.clone());
+                }
             });
         }
     }
