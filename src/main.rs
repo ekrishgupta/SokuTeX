@@ -20,6 +20,12 @@ use pdf_renderer::PdfRenderer;
 #[tokio::main]
 async fn main() {
     env_logger::init();
+    
+    // Start Compiler Daemon
+    let (compile_tx, compile_rx) = tokio::sync::mpsc::channel(10);
+    let daemon = compiler_daemon::CompilerDaemon::new(compile_rx);
+    tokio::spawn(daemon.run());
+
     let event_loop = EventLoop::new().unwrap();
     let window = WindowBuilder::new()
         .with_title("SokuTeX")
