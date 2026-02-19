@@ -9,6 +9,7 @@ use winit::{
 mod compiler;
 mod renderer;
 mod editor;
+mod pdf_renderer;
 
 #[tokio::main]
 async fn main() {
