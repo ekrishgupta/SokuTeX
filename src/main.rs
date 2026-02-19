@@ -25,24 +25,18 @@ async fn main() {
     let mut state = renderer::State::new(&window).await;
     
     // Initialize PDF Renderer
-    match PdfRenderer::new() {
-        Ok(pdf_renderer) => {
-             // Load test PDF
-             if let Ok(pdf_data) = std::fs::read("test.pdf") {
-                 let width = state.size.width as u16;
-                 let height = state.size.height as u16;
-                 if let Ok(pixels) = pdf_renderer.render_page(&pdf_data, 0, width, height) {
-                     // Update texture
-                     state.update_texture(width as u32, height as u32, &pixels);
-                 } else {
-                     eprintln!("Failed to resize/render PDF page");
-                 }
-             } else {
-                 eprintln!("Failed to read test.pdf");
-             }
+    let pdf_renderer = PdfRenderer::new().expect("Failed to initialize PdfRenderer");
+    let pdf_data = std::fs::read("test.pdf").expect("Failed to read test.pdf");
+
+    fn render_pdf(state: &mut renderer::State, pdf_renderer: &PdfRenderer, pdf_data: &[u8]) {
+        let width = state.size.width as u16;
+        let height = state.size.height as u16;
+        if let Ok(pixels) = pdf_renderer.render_page(pdf_data, 0, width, height) {
+            state.update_texture(width as u32, height as u32, &pixels);
         }
-        Err(e) => eprintln!("Failed to initialize PdfRenderer: {:?}", e),
     }
+
+    render_pdf(&mut state, &pdf_renderer, &pdf_data);
 
     event_loop.run(|event, target| {
         target.set_control_flow(ControlFlow::Poll);
