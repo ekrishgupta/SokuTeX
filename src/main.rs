@@ -254,10 +254,33 @@ async fn main() {
                             editor.move_to_line(line);
                         }
 
-                        // Sync back to editor if changed
+                        // Handle file change request from GUI
+                        if let Some(new_file) = gui.file_change_request.take() {
+                            // Save current text to VFS first
+                            vfs.write_file(&gui.active_file_path, gui.ui_text.as_bytes().to_vec());
+                            
+                            if let Some(content) = vfs.read_file(&new_file) {
+                                gui.active_file_path = new_file;
+                                gui.ui_text = String::from_utf8_lossy(&content).to_string();
+                                editor.buffer = ropey::Rope::from_str(&gui.ui_text);
+                                gui.last_compile_text = gui.ui_text.clone();
+                                gui.prev_ui_text = gui.ui_text.clone();
+                                gui.dependency_tree = Some(crate::dependencies::DependencyScanner::scan("main.tex", &vfs));
+                            }
+                        }
+
+                        // Sync back to editor and update VFS if changed
                         let current_text = gui.ui_text.clone();
                         if editor.get_text() != current_text {
                             editor.buffer = ropey::Rope::from_str(&current_text);
+                            
+                            // Update VFS and scan for dependencies
+                            vfs.write_file(&gui.active_file_path, current_text.as_bytes().to_vec());
+                            gui.dependency_tree = Some(crate::dependencies::DependencyScanner::scan("main.tex", &vfs));
+
+                            tokio::spawn(async move {
+                                let _ = io::IoHandler::auto_save(current_text, "autosave.tex").await;
+                            });
                         }
 
                         match render_res {
