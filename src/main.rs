@@ -40,6 +40,7 @@ async fn main() {
 
     render_pdf(&mut state, &pdf_renderer, &pdf_data);
     let mut palette = palette::CommandPalette::new();
+    let mut editor = editor::Editor::new();
 
     let mut modifiers = winit::event::Modifiers::default();
 
