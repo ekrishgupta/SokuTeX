@@ -26,6 +26,11 @@ pub struct Template {
     pub icon: String,
 }
 
+pub struct CompileError {
+    pub line: usize,
+    pub message: String,
+}
+
 pub struct Gui {
     pub view: View,
     pub active_tab: DashTab,
@@ -37,6 +42,8 @@ pub struct Gui {
     pub search_text: String,
     pub projects: Vec<ProjectItem>,
     pub templates: Vec<Template>,
+    pub errors: Vec<CompileError>,
+    pub show_errors: bool,
 }
 
 impl Gui {
@@ -63,6 +70,10 @@ impl Gui {
                 Template { name: "Presentation".into(), description: "Beamer-based slide deck".into(), icon: "🖼".into() },
                 Template { name: "Lab Report".into(), description: "Structured data and formulas".into(), icon: "🧪".into() },
             ],
+            errors: vec![
+                CompileError { line: 12, message: "Undefined control sequence \\textbfz".into() },
+            ],
+            show_errors: false,
         }
     }
 
@@ -404,6 +415,7 @@ impl Gui {
                             ui.spacing_mut().button_padding = egui::vec2(10.0, 3.0);
                             if ui.button(RichText::new("COMP").size(9.0).strong()).clicked() {
                                 self.compile_status = "BUSY".to_string();
+                                self.show_errors = !self.show_errors; // Toggle for demo
                             }
                             let _ = ui.button(RichText::new("SYNC").size(9.0).strong());
                             
@@ -414,6 +426,33 @@ impl Gui {
                     });
                 
                 ui.add_space(4.0);
+
+                if self.show_errors {
+                    egui::TopBottomPanel::bottom("error_gutter")
+                        .resizable(true)
+                        .default_height(100.0)
+                        .frame(egui::Frame::none().fill(Color32::from_rgb(18, 10, 12)))
+                        .show_inside(ui, |ui| {
+                            ui.add_space(8.0);
+                            ui.horizontal(|ui| {
+                                ui.add_space(16.0);
+                                ui.label(RichText::new("DIAGNOSTICS").size(10.0).color(Color32::from_rgb(180, 80, 90)).strong());
+                            });
+                            ui.add_space(8.0);
+                            
+                            egui::ScrollArea::vertical().show(ui, |ui| {
+                                for error in &self.errors {
+                                    ui.horizontal(|ui| {
+                                        ui.add_space(16.0);
+                                        ui.label(RichText::new(format!("L{}", error.line)).color(Color32::from_rgb(100, 110, 120)).font(FontId::monospace(11.0)));
+                                        ui.add_space(8.0);
+                                        ui.label(RichText::new(&error.message).color(Color32::from_rgb(200, 210, 220)).font(FontId::proportional(12.0)));
+                                    });
+                                    ui.add_space(4.0);
+                                }
+                            });
+                        });
+                }
                 
                 egui::ScrollArea::vertical()
                     .id_source("editor_scroll")
