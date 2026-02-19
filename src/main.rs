@@ -15,6 +15,7 @@ mod vfs;
 mod io;
 mod compiler_daemon;
 mod synctex;
+mod config;
 
 use pdf_renderer::PdfRenderer;
 
