@@ -6,7 +6,7 @@ edition = "2021"
 [dependencies]
 winit = "0.29"
 wgpu = "0.19"
-tokio = { version = "1.36", features = ["rt-multi-thread", "macros"] }
+tokio = { version = "1.36", features = ["rt-multi-thread", "macros", "fs", "sync", "time"] }
 # tectonic = "0.12" 
 ropey = "1.6"
 pdfium-render = "0.8"
