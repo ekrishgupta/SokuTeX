@@ -147,6 +147,18 @@ async fn main() {
                         // Check for compilation results
                         if let Ok(new_pdf) = result_rx.try_recv() {
                             render_pdf(&mut state, &pdf_renderer, &new_pdf);
+                            
+                            // Lazy pre-render adjacent pages
+                            let renderer = pdf_renderer.clone();
+                            let pdf = new_pdf.clone();
+                            let width = state.size.width as u16;
+                            let height = state.size.height as u16;
+                            tokio::spawn(async move {
+                                // Render next few pages into cache
+                                for i in 1..5 {
+                                    let _ = renderer.render_page(&pdf, i, width, height);
+                                }
+                            });
                         }
 
                         // Check for external file changes
