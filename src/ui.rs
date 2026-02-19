@@ -186,8 +186,14 @@ impl Gui {
                     // Results area
                     egui::ScrollArea::vertical().show(ui, |ui| {
                         ui.add_space(8.0);
-                        self.command_item(ui, "🏠 Go to Dashboard", "View your projects");
-                        self.command_item(ui, "🚀 Compile Document", "Run Tectonic on current file");
+                        if self.command_item(ui, "🏠 Go to Dashboard", "View your projects").clicked() {
+                            self.view = View::Dashboard;
+                            self.show_command_palette = false;
+                        }
+                        if self.command_item(ui, "🚀 Compile Document", "Run Tectonic on current file").clicked() {
+                            self.compile_status = "BUSY".to_string();
+                            self.show_command_palette = false;
+                        }
                         self.command_item(ui, "📚 Open Library", "Browse your LaTeX collection");
                         self.command_item(ui, "🎨 Change Theme", "Switch high-contrast or light mode");
                         ui.add_space(8.0);
@@ -196,7 +202,7 @@ impl Gui {
             });
     }
 
-    fn command_item(&mut self, ui: &mut egui::Ui, title: &str, subtitle: &str) {
+    fn command_item(&mut self, ui: &mut egui::Ui, title: &str, subtitle: &str) -> egui::Response {
         let response = egui::Frame::none()
             .inner_margin(egui::Margin::symmetric(16.0, 8.0))
             .show(ui, |ui| {
@@ -212,6 +218,7 @@ impl Gui {
             ui.painter().rect_filled(response.rect, 2.0, Color32::from_rgb(25, 28, 32));
             ui.output_mut(|o| o.cursor_icon = egui::CursorIcon::PointingHand);
         }
+        response
     }
 
     fn draw_dashboard(&mut self, ctx: &egui::Context) {
