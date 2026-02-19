@@ -12,8 +12,17 @@ pub struct ProjectItem {
     pub path: String,
 }
 
+#[derive(PartialEq)]
+pub enum DashTab {
+    Dashboard,
+    Library,
+    Templates,
+    Settings,
+}
+
 pub struct Gui {
     pub view: View,
+    pub active_tab: DashTab,
     pub ui_text: String,
     pub compile_status: String,
     pub selected_project: Option<String>,
@@ -26,6 +35,7 @@ impl Gui {
     pub fn new() -> Self {
         Self {
             view: View::Dashboard,
+            active_tab: DashTab::Dashboard,
             ui_text: String::new(),
             compile_status: "Idle".to_string(),
             selected_project: None,
@@ -113,7 +123,7 @@ impl Gui {
         }
 
         egui::SidePanel::left("dashboard_sidebar")
-            .width_range(160.0..=160.0)
+            .width_range(180.0..=180.0)
             .frame(egui::Frame::none().fill(Color32::from_rgb(13, 15, 17)))
             .show(ctx, |ui| {
                 // Branding Area - Aligned with traffic lights
@@ -132,88 +142,113 @@ impl Gui {
                 ui.add_space(32.0);
                 ui.vertical(|ui| {
                     ui.spacing_mut().item_spacing.y = 4.0;
-                    self.nav_item(ui, "Dashboard", true);
-                    self.nav_item(ui, "Library", false);
-                    self.nav_item(ui, "Templates", false);
+                    
+                    if self.nav_item(ui, "Dashboard", self.active_tab == DashTab::Dashboard).clicked() {
+                        self.active_tab = DashTab::Dashboard;
+                    }
+                    if self.nav_item(ui, "Library", self.active_tab == DashTab::Library).clicked() {
+                        self.active_tab = DashTab::Library;
+                    }
+                    if self.nav_item(ui, "Templates", self.active_tab == DashTab::Templates).clicked() {
+                        self.active_tab = DashTab::Templates;
+                    }
+                    
                     ui.add_space(ui.available_height() - 40.0);
-                    self.nav_item(ui, "Settings", false);
+                    if self.nav_item(ui, "Settings", self.active_tab == DashTab::Settings).clicked() {
+                        self.active_tab = DashTab::Settings;
+                    }
                 });
             });
 
         egui::CentralPanel::default()
             .frame(egui::Frame::none().fill(Color32::from_rgb(10, 12, 14)))
             .show(ctx, |ui| {
-                ui.add_space(16.0);
-                ui.horizontal(|ui| {
-                    ui.add_space(24.0);
-                    
-                    // Unified Search/Command Bar
-                    egui::Frame::none()
-                        .fill(Color32::from_rgb(18, 20, 23))
-                        .rounding(4.0)
-                        .stroke(egui::Stroke::new(1.0, Color32::from_rgb(30, 33, 38)))
-                        .inner_margin(egui::Margin::symmetric(12.0, 6.0))
-                        .show(ui, |ui| {
-                            ui.set_width(400.0);
-                            ui.horizontal(|ui| {
-                                ui.label(RichText::new("⌘").color(Color32::from_rgb(80, 85, 95)));
-                                ui.add(egui::TextEdit::singleline(&mut self.search_text)
-                                    .hint_text("Search or run command...")
-                                    .frame(false)
-                                    .desired_width(f32::INFINITY));
-                            });
-                        });
-                    
-                    ui.add_space(ui.available_width() - 80.0);
-                    ui.label(RichText::new("KG").strong().color(Color32::WHITE));
-                });
+                match self.active_tab {
+                    DashTab::Dashboard => self.render_dashboard_content(ui),
+                    DashTab::Library => {
+                        ui.centered_and_justified(|ui| ui.label(RichText::new("Library View").color(Color32::WHITE)));
+                    },
+                    DashTab::Templates => {
+                        ui.centered_and_justified(|ui| ui.label(RichText::new("Templates View").color(Color32::WHITE)));
+                    },
+                    DashTab::Settings => {
+                        ui.centered_and_justified(|ui| ui.label(RichText::new("Settings View").color(Color32::WHITE)));
+                    }
+                }
+            });
+    }
 
-                ui.add_space(32.0);
-                
-                // High-Density Project List
-                egui::ScrollArea::vertical().show(ui, |ui| {
+    fn render_dashboard_content(&mut self, ui: &mut egui::Ui) {
+        ui.add_space(16.0);
+        ui.horizontal(|ui| {
+            ui.add_space(24.0);
+            
+            // Unified Search/Command Bar
+            egui::Frame::none()
+                .fill(Color32::from_rgb(18, 20, 23))
+                .rounding(4.0)
+                .stroke(egui::Stroke::new(1.0, Color32::from_rgb(30, 33, 38)))
+                .inner_margin(egui::Margin::symmetric(12.0, 6.0))
+                .show(ui, |ui| {
+                    ui.set_width(400.0);
                     ui.horizontal(|ui| {
-                        ui.add_space(24.0);
-                        ui.vertical(|ui| {
-                            ui.horizontal(|ui| {
-                                ui.set_width(ui.available_width() - 24.0);
-                                ui.label(RichText::new("NAME").size(10.0).color(Color32::from_rgb(60, 65, 75)));
-                                ui.add_space(200.0);
-                                ui.label(RichText::new("PATH").size(10.0).color(Color32::from_rgb(60, 65, 75)));
-                                ui.add_space(ui.available_width() - 100.0);
-                                ui.label(RichText::new("MODIFIED").size(10.0).color(Color32::from_rgb(60, 65, 75)));
-                            });
-                            ui.add_space(8.0);
-                            ui.separator();
-                            ui.add_space(8.0);
-
-                            for i in 0..self.projects.len() {
-                                let is_selected = i == self.dash_selected_index;
-                                let project = &self.projects[i];
-                                let mut open_project = None;
-                                
-                                if self.project_row(ui, project, is_selected).clicked() {
-                                    open_project = Some(project.name.clone());
-                                }
-
-                                if open_project.is_some() {
-                                    self.view = View::Editor;
-                                    self.selected_project = open_project;
-                                }
-                            }
-                        });
+                        ui.label(RichText::new("⌘").color(Color32::from_rgb(80, 85, 95)));
+                        ui.add(egui::TextEdit::singleline(&mut self.search_text)
+                            .hint_text("Search or run command...")
+                            .frame(false)
+                            .desired_width(f32::INFINITY));
                     });
                 });
-                
-                // Keyboard hints
-                ui.with_layout(egui::Layout::bottom_up(egui::Align::RIGHT), |ui| {
-                    ui.add_space(16.0);
+            
+            ui.add_space(ui.available_width() - 80.0);
+            ui.label(RichText::new("KG").strong().color(Color32::WHITE));
+        });
+
+        ui.add_space(32.0);
+        
+        // High-Density Project List
+        egui::ScrollArea::vertical().show(ui, |ui| {
+            ui.horizontal(|ui| {
+                ui.add_space(24.0);
+                ui.vertical(|ui| {
                     ui.horizontal(|ui| {
-                        ui.label(RichText::new("↑↓ Navigate  •  ⏎ Open  •  ⌘N New").size(10.0).color(Color32::from_rgb(40, 45, 50)));
-                        ui.add_space(24.0);
+                        ui.set_width(ui.available_width() - 24.0);
+                        ui.label(RichText::new("NAME").size(10.0).color(Color32::from_rgb(60, 65, 75)));
+                        ui.add_space(200.0);
+                        ui.label(RichText::new("PATH").size(10.0).color(Color32::from_rgb(60, 65, 75)));
+                        ui.add_space(ui.available_width() - 100.0);
+                        ui.label(RichText::new("MODIFIED").size(10.0).color(Color32::from_rgb(60, 65, 75)));
                     });
+                    ui.add_space(8.0);
+                    ui.separator();
+                    ui.add_space(8.0);
+
+                    for i in 0..self.projects.len() {
+                        let is_selected = i == self.dash_selected_index;
+                        let project = &self.projects[i];
+                        let mut open_project = None;
+                        
+                        if self.project_row(ui, project, is_selected).clicked() {
+                            open_project = Some(project.name.clone());
+                        }
+
+                        if open_project.is_some() {
+                            self.view = View::Editor;
+                            self.selected_project = open_project;
+                        }
+                    }
                 });
             });
+        });
+        
+        // Keyboard hints
+        ui.with_layout(egui::Layout::bottom_up(egui::Align::RIGHT), |ui| {
+            ui.add_space(16.0);
+            ui.horizontal(|ui| {
+                ui.label(RichText::new("↑↓ Navigate  •  ⏎ Open  •  ⌘N New").size(10.0).color(Color32::from_rgb(40, 45, 50)));
+                ui.add_space(24.0);
+            });
+        });
     }
 
     fn project_row(&self, ui: &mut egui::Ui, project: &ProjectItem, selected: bool) -> egui::Response {
@@ -223,13 +258,13 @@ impl Gui {
         let response = egui::Frame::none()
             .fill(bg)
             .rounding(2.0)
-            .inner_margin(egui::Margin::symmetric(12.0, 8.0))
+            .inner_margin(egui::Margin::symmetric(14.0, 8.0))
             .show(ui, |ui| {
                 ui.set_width(ui.available_width());
                 ui.horizontal(|ui| {
                     ui.set_width(ui.available_width());
                     ui.label(RichText::new(&project.name).color(text_color).font(FontId::new(13.0, egui::FontFamily::Proportional)));
-                    ui.add_space(150.0);
+                    ui.add_space(20.0);
                     ui.label(RichText::new(&project.path).size(11.0).color(Color32::from_rgb(60, 70, 80)));
                     ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
                         ui.label(RichText::new(&project.modified).size(11.0).color(Color32::from_rgb(100, 110, 120)));
@@ -244,20 +279,32 @@ impl Gui {
         response
     }
 
-    fn nav_item(&mut self, ui: &mut egui::Ui, label: &str, active: bool) -> egui::Response {
-        let color = if active { Color32::WHITE } else { Color32::from_rgb(100, 110, 120) };
-        let bg = if active { Color32::from_rgb(20, 22, 25) } else { Color32::TRANSPARENT };
+    fn nav_item(&self, ui: &mut egui::Ui, label: &str, active: bool) -> egui::Response {
+        let (color, bg) = if active { 
+            (Color32::WHITE, Color32::from_rgb(25, 28, 32)) 
+        } else { 
+            (Color32::from_rgb(110, 120, 130), Color32::TRANSPARENT) 
+        };
         
-        egui::Frame::none()
+        let response = egui::Frame::none()
             .fill(bg)
-            .rounding(2.0)
-            .inner_margin(egui::Margin::symmetric(16.0, 6.0))
+            .rounding(4.0)
+            .inner_margin(egui::Margin::symmetric(14.0, 8.0))
             .show(ui, |ui| {
                 ui.horizontal(|ui| {
                     ui.set_width(ui.available_width());
-                    ui.label(RichText::new(label).color(color).font(FontId::new(12.0, egui::FontFamily::Proportional)));
+                    if active {
+                        ui.add_space(4.0);
+                    }
+                    ui.label(RichText::new(label).color(color).font(FontId::new(13.0, egui::FontFamily::Proportional)));
                 })
-            }).response.interact(egui::Sense::click())
+            }).response;
+
+        let response = response.interact(egui::Sense::click());
+        if response.hovered() {
+            ui.output_mut(|o| o.cursor_icon = egui::CursorIcon::PointingHand);
+        }
+        response
     }
 
     fn draw_editor(&mut self, ctx: &egui::Context, pdf_tex_id: Option<egui::TextureId>) {
