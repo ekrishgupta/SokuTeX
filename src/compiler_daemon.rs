@@ -18,7 +18,7 @@ impl CompilerDaemon {
     }
 
     pub async fn run(mut self) {
-        let compiler = Compiler::new();
+        let _compiler = Compiler::new();
         while let Some(request) = self.receiver.recv().await {
             match request {
                 CompileRequest::Compile { latex, response } => {
