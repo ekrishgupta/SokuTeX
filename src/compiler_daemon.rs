@@ -1,37 +1,42 @@
 use tokio::sync::{mpsc, oneshot};
 use crate::latexmk::{LatexmkPvc, LatexmkEvent};
 use crate::compiler::Compiler;
+use crate::vfs::Vfs;
 use crate::config::CompileBackend;
 use std::path::PathBuf;
+use std::sync::Arc;
 use tokio::fs;
+use log::info;
 
 pub enum CompileRequest {
     Compile {
         latex: String,
         backend: CompileBackend,
+        draft: bool,
         response: oneshot::Sender<Vec<u8>>,
     },
 }
 
 pub struct CompilerDaemon {
     receiver: mpsc::Receiver<CompileRequest>,
-    latexmk: Option<LatexmkPvc>,
+    latexmk: LatexmkPvc,
     event_rx: mpsc::Receiver<LatexmkEvent>,
-    event_tx: mpsc::Sender<LatexmkEvent>,
     pending_response: Option<oneshot::Sender<Vec<u8>>>,
     compiler: Compiler,
+    vfs: Arc<Vfs>,
 }
 
 impl CompilerDaemon {
-    pub fn new(receiver: mpsc::Receiver<CompileRequest>) -> Self {
+    pub fn new(receiver: mpsc::Receiver<CompileRequest>, vfs: Arc<Vfs>) -> Self {
         let (event_tx, event_rx) = mpsc::channel(10);
+        let latexmk = LatexmkPvc::spawn(PathBuf::from("main.tex"), event_tx).expect("Failed to spawn latexmk");
         Self { 
             receiver, 
-            latexmk: None, 
+            latexmk, 
             event_rx,
-            event_tx,
             pending_response: None,
-            compiler: Compiler::new(CompileBackend::Internal),
+            compiler: Compiler::new(),
+            vfs,
         }
     }
 
@@ -40,34 +45,28 @@ impl CompilerDaemon {
             tokio::select! {
                 Some(request) = self.receiver.recv() => {
                     match request {
-                        CompileRequest::Compile { latex, backend, response } => {
-                            match backend {
-                                CompileBackend::Latexmk => {
-                                    // Ensure latexmk is started
-                                    if self.latexmk.is_none() {
-                                        if let Ok(lmk) = LatexmkPvc::spawn(PathBuf::from("main.tex"), self.event_tx.clone()) {
-                                            self.latexmk = Some(lmk);
-                                        }
-                                    }
+                        CompileRequest::Compile { latex, backend, draft, response } => {
+                            self.compiler.set_backend(backend);
 
-                                    if let Some(lmk) = &mut self.latexmk {
-                                        // 1. Save content to main.tex
-                                        if let Ok(_) = fs::write("main.tex", latex).await {
-                                            // 2. Trigger rebuild via persistent handle
-                                            let _ = lmk.trigger_rebuild().await;
-                                            // 3. Store response channel to send back PDF when build finishes
-                                            self.pending_response = Some(response);
-                                        }
-                                    }
+                            if backend == CompileBackend::Latexmk {
+                                // Incremental Optimization: Inject \includeonly if possible
+                                let (optimized_latex, is_incremental) = self.compiler.optimize_latex(&latex, draft, &self.vfs);
+                                
+                                if is_incremental {
+                                    info!("Transparent Incremental Compilation: injecting \\includeonly");
                                 }
-                                _ => {
-                                    // Internal or Tectonic
-                                    self.compiler.set_backend(backend);
-                                    // In real impl, use active VFS
-                                    let vfs = crate::vfs::Vfs::new();
-                                    if let Ok(pdf) = self.compiler.compile(&latex, &vfs) {
-                                        let _ = response.send(pdf);
-                                    }
+
+                                // 1. Save optimized content to main.tex
+                                if let Ok(_) = fs::write("main.tex", optimized_latex).await {
+                                    // 2. Trigger rebuild via persistent handle
+                                    let _ = self.latexmk.trigger_rebuild().await;
+                                    // 3. Store response channel to send back PDF when build finishes
+                                    self.pending_response = Some(response);
+                                }
+                            } else {
+                                // Use Internal or Tectonic
+                                if let Ok(pdf) = self.compiler.compile(&latex, draft, &self.vfs) {
+                                    let _ = response.send(pdf);
                                 }
                             }
                         }
