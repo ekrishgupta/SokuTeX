@@ -54,7 +54,16 @@ async fn main() {
 
     render_pdf(&mut state, &pdf_renderer, &pdf_data);
     let mut palette = palette::CommandPalette::new();
+    let mut vfs = vfs::Vfs::new();
+    vfs.write_file("main.tex", b"\\documentclass{article}\n\\begin{document}\nHello SokuTeX!\n\\end{document}".to_vec());
+
     let mut editor = editor::Editor::new();
+    if let Some(content) = vfs.read_file("main.tex") {
+        let text = String::from_utf8_lossy(content);
+        for c in text.chars() {
+            editor.insert_char(c);
+        }
+    }
 
     let mut modifiers = winit::event::Modifiers::default();
 
