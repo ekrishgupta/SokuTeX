@@ -203,6 +203,13 @@ async fn main() {
                             current_pdf_data = std::sync::Arc::new(new_pdf);
                             request_render(pdf_renderer.clone(), current_pdf_data.clone(), current_pdf_revision, state.size.width as u16, state.size.height as u16, pdf_tx.clone());
                             
+                            // Load SyncTeX if available
+                            let mut stx = crate::synctex::SyncTex::new();
+                            // In a real app, this would be based on the project main file name
+                            if stx.load("main.synctex.gz").is_ok() || stx.load("main.synctex").is_ok() {
+                                gui.synctex = Some(stx);
+                            }
+
                             // Lazy pre-render adjacent pages
                             let renderer = pdf_renderer.clone();
                             let pdf = current_pdf_data.clone();
@@ -224,6 +231,11 @@ async fn main() {
                                     gui.ui_text = String::from_utf8_lossy(&content).to_string();
                                 }
                             }
+                        }
+
+                        // Handle Inverse Sync from GUI
+                        if let Some(line) = gui.sync_to_editor_request.take() {
+                            editor.move_to_line(line);
                         }
 
                         // Sync back to editor and autosave if changed
