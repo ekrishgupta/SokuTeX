@@ -115,8 +115,69 @@ impl Gui {
                 });
                 
                 ui.add_space(24.0);
-                // Placeholder for grid
+                
+                egui::ScrollArea::vertical().show(ui, |ui| {
+                    ui.horizontal_wrapped(|ui| {
+                        ui.add_space(32.0);
+                        ui.spacing_mut().item_spacing = egui::vec2(24.0, 24.0);
+                        
+                        // Action Card: Create New
+                        if self.project_card(ui, "+ New Project", "Create from template", true).clicked() {
+                            // Logic to create new
+                        }
+
+                        // Mock Projects
+                        if self.project_card(ui, "Quantum Mech Notes", "2 hours ago", false).clicked() {
+                            self.view = View::Editor;
+                            self.selected_project = Some("Quantum Mech Notes".into());
+                        }
+                        
+                        if self.project_card(ui, "Graph Theory HW", "Yesterday", false).clicked() {
+                            self.view = View::Editor;
+                            self.selected_project = Some("Graph Theory HW".into());
+                        }
+
+                        if self.project_card(ui, "Dissertation Draft", "3 days ago", false).clicked() {
+                            self.view = View::Editor;
+                            self.selected_project = Some("Dissertation Draft".into());
+                        }
+                    });
+                });
             });
+    }
+
+    fn project_card(&mut self, ui: &mut egui::Ui, title: &str, subtitle: &str, is_action: bool) -> egui::Response {
+        let (bg, border, text) = if is_action {
+            (Color32::from_rgb(30, 35, 45), Color32::from_rgb(50, 60, 80), Color32::WHITE)
+        } else {
+            (Color32::from_rgb(15, 17, 20), Color32::from_rgb(30, 33, 38), Color32::from_rgb(180, 190, 200))
+        };
+
+        let response = egui::Frame::none()
+            .fill(bg)
+            .rounding(8.0)
+            .stroke(egui::Stroke::new(1.0, border))
+            .inner_margin(egui::Margin::same(20.0))
+            .show(ui, |ui| {
+                ui.set_width(200.0);
+                ui.set_height(140.0);
+                ui.vertical(|ui| {
+                    ui.label(RichText::new(title).color(text).font(FontId::new(14.0, egui::FontFamily::Proportional)).strong());
+                    ui.add_space(4.0);
+                    ui.label(RichText::new(subtitle).color(Color32::from_rgb(100, 110, 120)).font(FontId::new(11.0, egui::FontFamily::Proportional)));
+                    
+                    ui.add_space(ui.available_height() - 20.0);
+                    ui.horizontal(|ui| {
+                        ui.label(RichText::new("LATEX").color(Color32::from_rgb(60, 70, 80)).font(FontId::new(9.0, egui::FontFamily::Monospace)));
+                    });
+                });
+            }).response;
+        
+        let response = response.interact(egui::Sense::click());
+        if response.hovered() {
+            ui.output_mut(|o| o.cursor_icon = egui::CursorIcon::PointingHand);
+        }
+        response
     }
 
     fn nav_item(&mut self, ui: &mut egui::Ui, label: &str, active: bool) -> egui::Response {
