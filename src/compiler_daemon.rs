@@ -2,6 +2,7 @@ use tokio::sync::mpsc;
 use crate::compiler::Compiler;
 
 pub enum CompileRequest {
+    #[allow(dead_code)]
     Compile {
         latex: String,
         response: tokio::sync::oneshot::Sender<Vec<u8>>,

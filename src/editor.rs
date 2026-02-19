@@ -1,5 +1,6 @@
 use ropey::Rope;
 
+#[allow(dead_code)]
 pub struct Editor {
     pub buffer: Rope,
     pub cursor: usize,

@@ -1,3 +1,4 @@
+#[allow(dead_code)]
 pub struct CommandPalette {
     pub visible: bool,
     pub commands: Vec<String>,

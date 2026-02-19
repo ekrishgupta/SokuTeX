@@ -6,6 +6,7 @@ impl SyncTex {
         0
     }
 
+    #[allow(dead_code)]
     pub fn editor_to_pdf(_offset: usize) -> (f32, f32, u16) {
         // Placeholder bridge
         (0.0, 0.0, 0)

@@ -1,3 +1,4 @@
+#[allow(dead_code)]
 pub struct Config {
     pub background_color: [f32; 4],
     pub font_size: f32,

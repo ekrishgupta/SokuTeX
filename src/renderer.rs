@@ -221,6 +221,7 @@ impl<'a> State<'a> {
     }
     
     // Stub for input handling
+    #[allow(dead_code)]
     pub fn input(&mut self, _event: &winit::event::WindowEvent) -> bool {
         false
     }

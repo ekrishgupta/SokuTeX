@@ -21,7 +21,8 @@ impl PdfRenderer {
         let render_config = PdfRenderConfig::new()
             .set_target_width(width as i32)
             .set_target_height(height as i32)
-            .rotate_if_landscape(PdfPageRenderRotation::None, true); // Keep consistent
+            .set_clear_color(PdfColor::new(255, 255, 255, 255))
+            .rotate_if_landscape(PdfPageRenderRotation::None, true);
 
         let bitmap = page.render_with_config(&render_config)?;
 
