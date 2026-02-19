@@ -28,9 +28,56 @@ impl Editor {
         }
     }
 
+    pub fn handle_key(&mut self, c: char) {
+        match self.mode {
+            EditorMode::Normal => self.handle_normal_key(c),
+            EditorMode::Insert => {
+                if c == '\u{1b}' {
+                    // Escape
+                    self.mode = EditorMode::Normal;
+                } else {
+                    self.insert_char(c);
+                }
+            }
+            EditorMode::Visual => self.handle_visual_key(c),
+        }
+    }
+
+    fn handle_normal_key(&mut self, c: char) {
+        match c {
+            'i' => self.mode = EditorMode::Insert,
+            'v' => {
+                self.mode = EditorMode::Visual;
+                self.visual_anchor = Some(self.cursor);
+            }
+            'h' => self.move_left(),
+            'j' => self.move_down(),
+            'k' => self.move_up(),
+            'l' => self.move_right(),
+            'x' => self.delete_char(),
+            'a' => {
+                self.move_right();
+                self.mode = EditorMode::Insert;
+            }
+            '0' => self.move_to_line_start(),
+            '$' => self.move_to_line_end(),
+            _ => {}
+        }
+    }
+
+    fn handle_visual_key(&mut self, _c: char) {
+        // To be implemented in next commit
+    }
+
     pub fn insert_char(&mut self, c: char) {
         self.buffer.insert_char(self.cursor, c);
         self.cursor += 1;
+    }
+
+    pub fn delete_char(&mut self) {
+        if self.cursor < self.buffer.len_chars() {
+            self.buffer.remove(self.cursor..self.cursor + 1);
+        }
     }
 
     pub fn delete_back(&mut self) {
