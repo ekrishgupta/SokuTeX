@@ -130,17 +130,7 @@ async fn main() {
     // PDF Render Channel
     let (pdf_tx, mut pdf_rx) = tokio::sync::mpsc::channel::<(u32, u32, Vec<u8>)>(2);
 
-    let request_render = |pdf_renderer: std::sync::Arc<PdfRenderer>, pdf_data: std::sync::Arc<Vec<u8>>, revision: u64, width: u16, height: u16, tx: tokio::sync::mpsc::Sender<(u32, u32, Vec<u8>)>| {
-        tokio::task::spawn_blocking(move || {
-            let timer = perf::PerfTimer::start("PDF Render (Async)");
-            if let Ok(pixels) = pdf_renderer.render_page(&pdf_data, revision, 0, width, height) {
-                let _ = tx.blocking_send((width as u32, height as u32, pixels));
-            }
-            timer.stop();
-        });
-    };
-
-    request_render(pdf_renderer.clone(), current_pdf_data.clone(), current_pdf_revision, state.size.width as u16, state.size.height as u16, pdf_tx.clone());
+    render_pdf(pdf_renderer.clone(), current_pdf_data.clone(), current_pdf_revision, 0, state.size.width as u16, state.size.height as u16, Some(pdf_tx.clone()));
     let mut palette = palette::CommandPalette::new();
 
     let mut gui = ui::Gui::new();
