@@ -267,6 +267,9 @@ impl Gui {
                     if self.nav_item(ui, "Templates", self.active_tab == DashTab::Templates).clicked() {
                         self.active_tab = DashTab::Templates;
                     }
+                    if self.nav_item(ui, "Symbols", self.active_tab == DashTab::Symbols).clicked() {
+                        self.active_tab = DashTab::Symbols;
+                    }
                     
                     ui.add_space(ui.available_height() - 40.0);
                     if self.nav_item(ui, "Settings", self.active_tab == DashTab::Settings).clicked() {
