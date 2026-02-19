@@ -53,11 +53,19 @@ async fn main() {
                     WindowEvent::KeyboardInput {
                         event: KeyEvent {
                             state: ElementState::Pressed,
-                            logical_key: Key::Named(NamedKey::Escape),
+                            logical_key,
                             ..
                         },
                         ..
-                    } => target.exit(),
+                    } => match logical_key {
+                        Key::Named(NamedKey::Escape) => target.exit(),
+                        Key::Character(c) if c == "p" => {
+                            // TODO check for cmd/ctrl
+                            palette.toggle();
+                            println!("Palette visible: {}", palette.visible);
+                        }
+                        _ => {}
+                    },
                     WindowEvent::Resized(physical_size) => {
                         state.resize(*physical_size);
                         render_pdf(&mut state, &pdf_renderer, &pdf_data);
