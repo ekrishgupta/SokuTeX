@@ -1,10 +1,19 @@
 use ropey::Rope;
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum EditorMode {
+    Normal,
+    Insert,
+    Visual,
+}
+
 #[allow(dead_code)]
 pub struct Editor {
     pub buffer: Rope,
     pub cursor: usize,
+    pub mode: EditorMode,
     pub entries: Vec<crate::bib::BibEntry>,
+    pub visual_anchor: Option<usize>,
 }
 
 #[allow(dead_code)]
@@ -13,7 +22,9 @@ impl Editor {
         Self {
             buffer: Rope::new(),
             cursor: 0,
+            mode: EditorMode::Normal,
             entries: Vec::new(),
+            visual_anchor: None,
         }
     }
 
