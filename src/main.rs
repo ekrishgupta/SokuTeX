@@ -17,6 +17,7 @@ mod compiler_daemon;
 mod synctex;
 mod config;
 mod bib;
+mod perf;
 
 use pdf_renderer::PdfRenderer;
 
