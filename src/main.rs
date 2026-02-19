@@ -19,6 +19,9 @@ mod config;
 mod bib;
 mod perf;
 mod ui;
+mod syntax;
+mod autocomplete;
+mod watcher;
 
 use pdf_renderer::PdfRenderer;
 
