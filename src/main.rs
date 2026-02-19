@@ -11,6 +11,8 @@ mod renderer;
 mod editor;
 mod pdf_renderer;
 
+use pdf_renderer::PdfRenderer;
+
 #[tokio::main]
 async fn main() {
     env_logger::init();
@@ -21,6 +23,26 @@ async fn main() {
         .unwrap();
 
     let mut state = renderer::State::new(&window).await;
+    
+    // Initialize PDF Renderer
+    match PdfRenderer::new() {
+        Ok(pdf_renderer) => {
+             // Load test PDF
+             if let Ok(pdf_data) = std::fs::read("test.pdf") {
+                 let width = state.size.width as u16;
+                 let height = state.size.height as u16;
+                 if let Ok(pixels) = pdf_renderer.render_page(&pdf_data, 0, width, height) {
+                     // Update texture
+                     state.update_texture(width as u32, height as u32, &pixels);
+                 } else {
+                     eprintln!("Failed to resize/render PDF page");
+                 }
+             } else {
+                 eprintln!("Failed to read test.pdf");
+             }
+        }
+        Err(e) => eprintln!("Failed to initialize PdfRenderer: {:?}", e),
+    }
 
     event_loop.run(|event, target| {
         target.set_control_flow(ControlFlow::Poll);
@@ -42,10 +64,9 @@ async fn main() {
                     } => target.exit(),
                     WindowEvent::Resized(physical_size) => {
                         state.resize(*physical_size);
+                        // TODO: Re-render PDF on resize?
                     }
-                    WindowEvent::ScaleFactorChanged { .. } => {
-                       // handled
-                    }
+                    WindowEvent::ScaleFactorChanged { .. } => {}
                     WindowEvent::RedrawRequested => {
                         match state.render() {
                             Ok(_) => {}
