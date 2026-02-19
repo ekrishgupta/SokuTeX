@@ -22,8 +22,9 @@ impl CompilerDaemon {
         while let Some(request) = self.receiver.recv().await {
             match request {
                 CompileRequest::Compile { latex, response } => {
-                    // Simulate compilation for now
-                    if let Ok(pdf) = Compiler::compile(&latex) {
+                    // In real impl, use active VFS
+                    let vfs = crate::vfs::Vfs::new();
+                    if let Ok(pdf) = Compiler::compile(&latex, &vfs) {
                         let _ = response.send(pdf);
                     }
                 }
