@@ -712,6 +712,11 @@ impl Gui {
                                 .code_editor()
                                 .lock_focus(true)
                                 .desired_width(f32::INFINITY)
+                                .layouter(&mut |ui, string, wrap_width| {
+                                    let mut layout_job = crate::syntax::LatexSyntaxHighlighter::format_text(string);
+                                    layout_job.wrap.max_width = wrap_width;
+                                    ui.fonts(|f| f.layout_job(layout_job))
+                                })
                         );
                     });
             });
