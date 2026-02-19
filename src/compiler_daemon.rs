@@ -8,12 +8,17 @@ use std::sync::Arc;
 use tokio::fs;
 use log::info;
 
+pub struct CompileResult {
+    pub pdf: Vec<u8>,
+    pub revision: u64,
+}
+
 pub enum CompileRequest {
     Compile {
         latex: String,
         backend: CompileBackend,
         draft: bool,
-        response: oneshot::Sender<Vec<u8>>,
+        response: oneshot::Sender<CompileResult>,
     },
 }
 
@@ -21,9 +26,10 @@ pub struct CompilerDaemon {
     receiver: mpsc::Receiver<CompileRequest>,
     latexmk: LatexmkPvc,
     event_rx: mpsc::Receiver<LatexmkEvent>,
-    pending_response: Option<oneshot::Sender<Vec<u8>>>,
+    pending_response: Option<oneshot::Sender<CompileResult>>,
     compiler: Compiler,
     vfs: Arc<Vfs>,
+    revision: u64,
 }
 
 impl CompilerDaemon {
@@ -37,6 +43,7 @@ impl CompilerDaemon {
             pending_response: None,
             compiler: Compiler::new(),
             vfs,
+            revision: 0,
         }
     }
 
@@ -66,7 +73,8 @@ impl CompilerDaemon {
                             } else {
                                 // Use Internal or Tectonic
                                 if let Ok(pdf) = self.compiler.compile(&latex, draft, &self.vfs) {
-                                    let _ = response.send(pdf);
+                                    self.revision += 1;
+                                    let _ = response.send(CompileResult { pdf, revision: self.revision });
                                 }
                             }
                         }
@@ -79,7 +87,8 @@ impl CompilerDaemon {
                                 if let Some(response) = self.pending_response.take() {
                                     // 4. Read generated PDF and send back
                                     if let Ok(pdf_data) = fs::read("main.pdf").await {
-                                        let _ = response.send(pdf_data);
+                                        self.revision += 1;
+                                        let _ = response.send(CompileResult { pdf: pdf_data, revision: self.revision });
                                     }
                                 }
                             }
