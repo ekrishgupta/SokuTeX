@@ -65,8 +65,24 @@ impl Editor {
         }
     }
 
-    fn handle_visual_key(&mut self, _c: char) {
-        // To be implemented in next commit
+    fn handle_visual_key(&mut self, c: char) {
+        match c {
+            '\u{1b}' => {
+                // Escape
+                self.mode = EditorMode::Normal;
+                self.visual_anchor = None;
+            }
+            'h' => self.move_left(),
+            'j' => self.move_down(),
+            'k' => self.move_up(),
+            'l' => self.move_right(),
+            'd' | 'x' => {
+                self.delete_selection();
+                self.mode = EditorMode::Normal;
+                self.visual_anchor = None;
+            }
+            _ => {}
+        }
     }
 
     pub fn insert_char(&mut self, c: char) {
@@ -84,6 +100,17 @@ impl Editor {
         if self.cursor > 0 {
             self.buffer.remove(self.cursor - 1..self.cursor);
             self.cursor -= 1;
+        }
+    }
+
+    fn delete_selection(&mut self) {
+        if let Some(anchor) = self.visual_anchor {
+            let start = anchor.min(self.cursor);
+            let end = anchor.max(self.cursor);
+            if start < end {
+                self.buffer.remove(start..end);
+                self.cursor = start;
+            }
         }
     }
 
