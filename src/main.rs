@@ -27,7 +27,8 @@ async fn main() {
     env_logger::init();
     
     // Start Compiler Daemon
-    let (_compile_tx, compile_rx) = tokio::sync::mpsc::channel(10);
+    let (compile_tx, compile_rx) = tokio::sync::mpsc::channel(10);
+    let (result_tx, mut result_rx) = tokio::sync::mpsc::channel(1);
     let daemon = compiler_daemon::CompilerDaemon::new(compile_rx);
     tokio::spawn(daemon.run());
 
@@ -116,6 +117,29 @@ async fn main() {
                         let render_res = state.render(&window, |ctx| {
                             gui.draw(ctx, pdf_texture_id);
                         });
+
+                        // Check for Auto-Compile requests from GUI
+                        if gui.compile_requested {
+                            gui.compile_requested = false;
+                            gui.last_compile_text = gui.ui_text.clone();
+                            let tx = compile_tx.clone();
+                            let text = gui.ui_text.clone();
+                            let r_tx = result_tx.clone();
+                            tokio::spawn(async move {
+                                let (otx, orx) = tokio::sync::oneshot::channel();
+                                use crate::compiler_daemon::CompileRequest;
+                                if tx.send(CompileRequest::Compile { latex: text, response: otx }).await.is_ok() {
+                                    if let Ok(pdf) = orx.await {
+                                        let _ = r_tx.send(pdf).await;
+                                    }
+                                }
+                            });
+                        }
+
+                        // Check for compilation results
+                        if let Ok(new_pdf) = result_rx.try_recv() {
+                            render_pdf(&mut state, &pdf_renderer, &new_pdf);
+                        }
 
                         // Sync back to editor and autosave if changed
                         let current_text = gui.ui_text.clone();
