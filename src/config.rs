@@ -2,6 +2,7 @@
 pub enum CompileBackend {
     Internal,
     Tectonic,
+    Latexmk,
 }
 
 pub struct Config {
