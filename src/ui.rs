@@ -720,7 +720,7 @@ impl Gui {
                         );
                         if let Some(state) = egui::TextEdit::load_state(ui.ctx(), resp.id) {
                             // Simple prefix matching based on cursor
-                            let char_idx = state.selection().primary().ccursor.index;
+                            let char_idx = state.ccursor_range().map(|r| r.primary.index).unwrap_or(0);
                             let text_up_to_cursor: String = self.ui_text.chars().take(char_idx).collect();
                             if let Some(last_backslash) = text_up_to_cursor.rfind('\\') {
                                 let prefix = &text_up_to_cursor[last_backslash..];
