@@ -717,6 +717,7 @@ impl Gui {
                                     layout_job.wrap.max_width = wrap_width;
                                     ui.fonts(|f| f.layout_job(layout_job))
                                 })
+                        );
                         if let Some(state) = egui::TextEdit::load_state(ui.ctx(), _resp.id) {
                             if let Some(cursor_range) = state.cursor_range() {
                                 let char_idx = cursor_range.primary.ccursor.index;
