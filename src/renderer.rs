@@ -7,14 +7,6 @@ pub struct PdfUniforms {
     pub transform: [[f32; 4]; 4],
 }
 
-use winit::window::Window;
-use bytemuck::{Pod, Zeroable};
-
-#[repr(C)]
-#[derive(Copy, Clone, Debug, Pod, Zeroable)]
-pub struct PdfUniforms {
-    pub transform: [[f32; 4]; 4],
-}
 
 pub struct State<'a> {
     surface: wgpu::Surface<'a>,
@@ -345,9 +337,8 @@ impl<'a> State<'a> {
         }
     }
 
-    pub fn update_uniforms(&mut self, transform: [[f32; 4]; 4]) {
-        self.uniforms.transform = transform;
-        self.queue.write_buffer(&self.uniform_buffer, 0, bytemuck::cast_slice(&[self.uniforms]));
+    pub fn update_texture(&mut self, width: u32, height: u32, data: &[u8]) {
+        self.update_texture_region(0, 0, width, height, data);
     }
 
     pub fn update_uniforms(&mut self, transform: [[f32; 4]; 4]) {
@@ -420,14 +411,4 @@ impl<'a> State<'a> {
         Ok(())
     }
 
-
-        for id in &full_output.textures_delta.free {
-            self.egui_renderer.free_texture(id);
-        }
-
-        self.queue.submit(std::iter::once(encoder.finish()));
-        output.present();
-
-        Ok(())
-    }
 }
