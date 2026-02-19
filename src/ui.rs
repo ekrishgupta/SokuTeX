@@ -1,15 +1,25 @@
 use egui::{Color32, FontId, RichText, Visuals};
 
+#[derive(PartialEq)]
+pub enum View {
+    Dashboard,
+    Editor,
+}
+
 pub struct Gui {
+    pub view: View,
     pub ui_text: String,
     pub compile_status: String,
+    pub selected_project: Option<String>,
 }
 
 impl Gui {
     pub fn new() -> Self {
         Self {
+            view: View::Dashboard,
             ui_text: String::new(),
             compile_status: "Idle".to_string(),
+            selected_project: None,
         }
     }
 
@@ -67,28 +77,27 @@ impl Gui {
             .min_width(350.0)
             .frame(egui::Frame::none().fill(Color32::from_rgb(10, 12, 14)))
             .show(ctx, |ui| {
-                // Top Control Bar Area - Centered with traffic lights
+                // Top Control Bar Area - Pinned to top edge
                 egui::Frame::none()
                     .fill(Color32::from_rgb(10, 12, 14))
-                    .inner_margin(egui::Margin { left: 16.0, right: 16.0, top: 4.0, bottom: 4.0 })
+                    .inner_margin(egui::Margin { left: 16.0, right: 16.0, top: 12.0, bottom: 4.0 })
                     .show(ui, |ui| {
-                        ui.with_layout(egui::Layout::left_to_right(egui::Align::Center), |ui| {
-                            ui.add_space(64.0); // Clear traffic lights
-                            ui.spacing_mut().item_spacing.x = 16.0;
-                            
-                            // Visuals for buttons in the header
+                        ui.horizontal(|ui| {
+                            ui.spacing_mut().item_spacing.x = 24.0;
+                            ui.add_space(60.0); // Offset for macOS traffic lights
+
+                            // Visuals for buttons - integrated into the title bar
                             ui.visuals_mut().widgets.inactive.bg_fill = Color32::from_rgb(30, 32, 35);
                             ui.visuals_mut().widgets.hovered.bg_fill = Color32::from_rgb(45, 48, 52);
 
-                            // SokuTeX Brand
+                            // Branding - Vertically centered with buttons via item_spacing or manual offset
                             ui.label(RichText::new("SokuTeX")
                                 .font(FontId::new(17.0, egui::FontFamily::Name("logo_font".into())))
                                 .color(Color32::WHITE)
                                 .extra_letter_spacing(0.1));
                             
-                            ui.add_space(4.0);
+                            ui.add_space(-4.0);
                             
-                            // Buttons row
                             ui.spacing_mut().button_padding = egui::vec2(10.0, 3.0);
                             if ui.button(RichText::new("COMP").size(9.0).strong()).clicked() {
                                 self.compile_status = "BUSY".to_string();
@@ -98,7 +107,7 @@ impl Gui {
                         });
                     });
                 
-                ui.add_space(8.0);
+                ui.add_space(4.0);
                 
                 egui::ScrollArea::vertical()
                     .id_source("editor_scroll")
