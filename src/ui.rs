@@ -296,11 +296,72 @@ impl Gui {
                     },
                     DashTab::Templates => self.render_templates_content(ui),
                     DashTab::Symbols => self.render_symbols_content(ui),
-                    DashTab::Settings => {
-                        ui.centered_and_justified(|ui| ui.label(RichText::new("Settings View").color(Color32::WHITE)));
-                    }
+                    DashTab::Settings => self.render_settings_content(ui),
                 }
             });
+    }
+
+    fn render_settings_content(&mut self, ui: &mut egui::Ui) {
+        ui.add_space(16.0);
+        ui.horizontal(|ui| {
+            ui.add_space(24.0);
+            ui.label(RichText::new("Application Settings").font(FontId::new(20.0, egui::FontFamily::Proportional)).color(Color32::WHITE).strong());
+        });
+        
+        ui.add_space(32.0);
+        
+        egui::ScrollArea::vertical().show(ui, |ui| {
+            ui.horizontal(|ui| {
+                ui.add_space(24.0);
+                ui.vertical(|ui| {
+                    ui.label(RichText::new("APPEARANCE").size(10.0).color(Color32::from_rgb(60, 65, 75)));
+                    ui.add_space(12.0);
+                    
+                    ui.horizontal(|ui| {
+                        if self.theme_option(ui, "Midnight", self.theme == LatexTheme::Midnight) {
+                            self.theme = LatexTheme::Midnight;
+                        }
+                        ui.add_space(12.0);
+                        if self.theme_option(ui, "Soft Gray", self.theme == LatexTheme::SoftGray) {
+                            self.theme = LatexTheme::SoftGray;
+                        }
+                    });
+
+                    ui.add_space(32.0);
+                    ui.label(RichText::new("EDITOR BEHAVIOR").size(10.0).color(Color32::from_rgb(60, 65, 75)));
+                    ui.add_space(12.0);
+                    
+                    ui.checkbox(&mut true, "Auto-compile on save");
+                    ui.add_space(8.0);
+                    ui.checkbox(&mut true, "Enable SyncTeX (Double-click to navigate)");
+                    ui.add_space(8.0);
+                    ui.checkbox(&mut false, "Show line numbers");
+                });
+            });
+        });
+    }
+
+    fn theme_option(&self, ui: &mut egui::Ui, label: &str, selected: bool) -> bool {
+        let (bg, border) = if selected {
+            (Color32::from_rgb(30, 35, 45), Color32::from_rgb(60, 100, 200))
+        } else {
+            (Color32::from_rgb(15, 17, 20), Color32::from_rgb(30, 33, 38))
+        };
+
+        let response = egui::Frame::none()
+            .fill(bg)
+            .rounding(6.0)
+            .stroke(egui::Stroke::new(1.0, border))
+            .inner_margin(egui::Margin::symmetric(24.0, 12.0))
+            .show(ui, |ui| {
+                ui.label(RichText::new(label).color(Color32::WHITE).size(13.0));
+            }).response;
+        
+        let response = response.interact(egui::Sense::click());
+        if response.hovered() {
+            ui.output_mut(|o| o.cursor_icon = egui::CursorIcon::PointingHand);
+        }
+        response.clicked()
     }
 
     fn render_symbols_content(&mut self, ui: &mut egui::Ui) {
