@@ -58,6 +58,7 @@ pub struct Gui {
     pub prev_ui_text: String,
     pub compile_timer: std::time::Instant,
     pub compile_requested: bool,
+    pub autocomplete: crate::autocomplete::AutocompleteEngine,
 }
 
 impl Gui {
@@ -95,6 +96,7 @@ impl Gui {
             prev_ui_text: String::new(),
             compile_timer: std::time::Instant::now(),
             compile_requested: false,
+            autocomplete: crate::autocomplete::AutocompleteEngine::new(),
         }
     }
 
