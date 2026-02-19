@@ -19,6 +19,7 @@ pub enum CompileRequest {
         latex: String,
         backend: CompileBackend,
         draft: bool,
+        focus_mode: bool,
         active_file: Option<String>,
         response: oneshot::Sender<CompileResult>,
     },
@@ -32,6 +33,7 @@ pub struct CompilerDaemon {
     compiler: Compiler,
     vfs: Arc<Vfs>,
     revision: u64,
+    last_pdf_hash: u64,
 }
 
 impl CompilerDaemon {
@@ -54,6 +56,7 @@ impl CompilerDaemon {
             compiler: Compiler::new(),
             vfs,
             revision: 0,
+            last_pdf_hash: 0,
         }
     }
 
@@ -62,7 +65,7 @@ impl CompilerDaemon {
             tokio::select! {
                 Some(request) = self.receiver.recv() => {
                     match request {
-                        CompileRequest::Compile { latex, mut backend, draft, active_file, response } => {
+                        CompileRequest::Compile { latex, mut backend, draft, focus_mode, active_file, response } => {
                             if draft {
                                 // Force Internal for near-instant feedback in draft mode
                                 backend = CompileBackend::Internal;
@@ -73,7 +76,7 @@ impl CompilerDaemon {
                             if backend == CompileBackend::Latexmk {
                                 if let Some(ref mut latexmk) = self.latexmk {
                                     // Incremental Optimization: Inject \includeonly if possible
-                                    let (optimized_latex, is_incremental) = self.compiler.optimize_latex(&latex, draft, &self.vfs);
+                                    let (optimized_latex, is_incremental) = self.compiler.optimize_latex(&latex, draft, focus_mode, &self.vfs);
                                     
                                     if is_incremental {
                                         info!("Transparent Incremental Compilation: injecting \\includeonly");
@@ -89,16 +92,14 @@ impl CompilerDaemon {
                                 } else {
                                     // Fallback if latexmk failed to start
                                     error!("Latexmk requested but not available. Falling back to internal.");
-                                    if let Ok(pdf) = self.compiler.compile(&latex, draft, &self.vfs) {
-                                        self.revision += 1;
-                                        let _ = response.send(CompileResult { pdf, revision: self.revision, synctex_data: None });
+                                    if let Ok(pdf) = self.compiler.compile(&latex, draft, focus_mode, &self.vfs) {
+                                        self.update_revision_and_send(pdf, None, response);
                                     }
                                 }
                             } else {
                                 // Use Internal or Tectonic
-                                if let Ok(pdf) = self.compiler.compile(&latex, draft, &self.vfs) {
-                                    self.revision += 1;
-                                    let _ = response.send(CompileResult { pdf, revision: self.revision, synctex_data: None });
+                                if let Ok(pdf) = self.compiler.compile(&latex, draft, focus_mode, &self.vfs) {
+                                    self.update_revision_and_send(pdf, None, response);
                                 }
                             }
                         }
@@ -119,12 +120,7 @@ impl CompilerDaemon {
                                             None
                                         };
 
-                                        self.revision += 1;
-                                        let _ = response.send(CompileResult { 
-                                            pdf: pdf_data, 
-                                            revision: self.revision,
-                                            synctex_data,
-                                        });
+                                        self.update_revision_and_send(pdf_data, synctex_data, response);
                                     }
                                 }
                             }
@@ -136,5 +132,23 @@ impl CompilerDaemon {
                 }
             }
         }
+    }
+
+    fn update_revision_and_send(&mut self, pdf: Vec<u8>, synctex_data: Option<Vec<u8>>, response: oneshot::Sender<CompileResult>) {
+        let mut hasher = ahash::AHasher::default();
+        use std::hash::Hasher;
+        pdf.hash(&mut hasher);
+        let hash = hasher.finish();
+
+        if hash != self.last_pdf_hash {
+            self.revision += 1;
+            self.last_pdf_hash = hash;
+        }
+
+        let _ = response.send(CompileResult { 
+            pdf, 
+            revision: self.revision,
+            synctex_data,
+        });
     }
 }
