@@ -11,6 +11,7 @@ mod renderer;
 mod editor;
 mod pdf_renderer;
 mod palette;
+mod vfs;
 
 use pdf_renderer::PdfRenderer;
 
