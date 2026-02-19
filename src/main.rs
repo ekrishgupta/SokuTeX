@@ -57,19 +57,23 @@ async fn main() {
     
     // Initialize PDF Renderer with the workspace preview
     let pdf_renderer = std::sync::Arc::new(PdfRenderer::new().expect("Failed to initialize PdfRenderer"));
-    let initial_pdf_data = std::fs::read("workspace_preview.pdf").expect("Failed to read workspace_preview.pdf");
+    let mut current_pdf_data = std::fs::read("workspace_preview.pdf").expect("Failed to read workspace_preview.pdf");
+    let mut current_pdf_revision = 0u64;
 
-    fn render_pdf(state: &mut renderer::State, pdf_renderer: &PdfRenderer, pdf_data: &[u8]) {
-        let timer = perf::PerfTimer::start("PDF Render");
-        let width = state.size.width as u16;
-        let height = state.size.height as u16;
-        if let Ok(pixels) = pdf_renderer.render_page(pdf_data, 0, width, height) {
-            state.update_texture(width as u32, height as u32, &pixels);
-        }
-        timer.stop();
-    }
+    // PDF Render Channel
+    let (pdf_tx, mut pdf_rx) = tokio::sync::mpsc::channel::<(u32, u32, Vec<u8>)>(2);
 
-    render_pdf(&mut state, &pdf_renderer, &initial_pdf_data);
+    let request_render = |pdf_renderer: std::sync::Arc<PdfRenderer>, pdf_data: Vec<u8>, revision: u64, width: u16, height: u16, tx: tokio::sync::mpsc::Sender<(u32, u32, Vec<u8>)>| {
+        tokio::task::spawn_blocking(move || {
+            let timer = perf::PerfTimer::start("PDF Render (Async)");
+            if let Ok(pixels) = pdf_renderer.render_page(&pdf_data, revision, 0, width, height) {
+                let _ = tx.blocking_send((width as u32, height as u32, pixels));
+            }
+            timer.stop();
+        });
+    };
+
+    request_render(pdf_renderer.clone(), current_pdf_data.clone(), current_pdf_revision, state.size.width as u16, state.size.height as u16, pdf_tx.clone());
     let mut palette = palette::CommandPalette::new();
     let vfs = vfs::Vfs::new();
     vfs.write_file("main.tex", b"\\documentclass{article}\n\\input{sections/intro}\n\\include{sections/chapter1}\n\\begin{document}\nHello SokuTeX!\n\\end{document}".to_vec());
@@ -120,13 +124,18 @@ async fn main() {
                     }
                     WindowEvent::Resized(physical_size) => {
                         state.resize(*physical_size);
-                        render_pdf(&mut state, &pdf_renderer, &initial_pdf_data);
+                        request_render(pdf_renderer.clone(), current_pdf_data.clone(), current_pdf_revision, state.size.width as u16, state.size.height as u16, pdf_tx.clone());
                     }
                     WindowEvent::ScaleFactorChanged { .. } => {}
                     WindowEvent::ModifiersChanged(new_modifiers) => {
                         modifiers = *new_modifiers;
                     }
                     WindowEvent::RedrawRequested => {
+                        // Check for PDF render results
+                        if let Ok((w, h, pixels)) = pdf_rx.try_recv() {
+                            state.update_texture(w, h, &pixels);
+                        }
+
                         let pdf_texture_id = state.pdf_texture_id;
                         
                         let render_res = state.render(&window, |ctx| {
@@ -158,17 +167,20 @@ async fn main() {
 
                         // Check for compilation results
                         if let Ok(new_pdf) = result_rx.try_recv() {
-                            render_pdf(&mut state, &pdf_renderer, &new_pdf);
+                            current_pdf_revision += 1;
+                            current_pdf_data = new_pdf;
+                            request_render(pdf_renderer.clone(), current_pdf_data.clone(), current_pdf_revision, state.size.width as u16, state.size.height as u16, pdf_tx.clone());
                             
                             // Lazy pre-render adjacent pages
                             let renderer = pdf_renderer.clone();
-                            let pdf = new_pdf.clone();
+                            let pdf = current_pdf_data.clone();
+                            let revision = current_pdf_revision;
                             let width = state.size.width as u16;
                             let height = state.size.height as u16;
                             tokio::spawn(async move {
                                 // Render next few pages into cache
                                 for i in 1..5 {
-                                    let _ = renderer.render_page(&pdf, i, width, height);
+                                    let _ = renderer.render_page(&pdf, revision, i, width, height);
                                 }
                             });
                         }
