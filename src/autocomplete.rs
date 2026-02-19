@@ -1,8 +1,8 @@
-use std::collections::HashMap;
+use ahash::AHashMap;
 
 #[derive(Default)]
 pub struct AutocompleteNode {
-    children: HashMap<char, AutocompleteNode>,
+    children: AHashMap<char, AutocompleteNode>,
     is_word: bool,
     command: String,
 }
