@@ -1,5 +1,5 @@
 use std::path::{Path, PathBuf};
-use std::collections::HashMap;
+use ahash::AHashMap;
 use std::fs::File;
 use std::io::{BufRead, BufReader};
 
@@ -17,7 +17,7 @@ pub struct SyncTexNode {
 }
 
 pub struct SyncTex {
-    pub inputs: HashMap<u32, PathBuf>,
+    pub inputs: AHashMap<u32, PathBuf>,
     pub nodes: Vec<SyncTexNode>,
     pub unit: f32, // Unit scaling from SyncTeX (usually 72/65536 or similar)
 }
@@ -25,7 +25,7 @@ pub struct SyncTex {
 impl SyncTex {
     pub fn new() -> Self {
         Self {
-            inputs: HashMap::new(),
+            inputs: AHashMap::new(),
             nodes: Vec::new(),
             unit: 1.0,
         }
