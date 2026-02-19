@@ -1,4 +1,3 @@
-use wgpu::util::DeviceExt;
 use winit::window::Window;
 
 pub struct State<'a> {
