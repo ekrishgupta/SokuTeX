@@ -49,7 +49,9 @@ impl Compiler {
         // 4. Execution
         let result = match self.backend {
             CompileBackend::Internal => self.compile_internal(&optimized_latex),
-            CompileBackend::Tectonic => self.compile_tectonic(&optimized_latex),
+            CompileBackend::Tectonic => {
+                return Err("Tectonic backend is disabled.".into());
+            }
             CompileBackend::Latexmk => {
                 return Err("Latexmk backend is handled asynchronously by the daemon".into());
             }
@@ -57,12 +59,6 @@ impl Compiler {
 
         self.cache.insert(final_hash, result.clone());
         Ok(result)
-    }
-
-    fn compile_tectonic(&self, latex: &str) -> Result<Vec<u8>, Box<dyn Error>> {
-        // Tectonic: A complete, self-contained TeX/LaTeX engine
-        // Powered by XeTeX and TeXLive
-        Ok(tectonic::latex_to_pdf(latex)?)
     }
 
     /// Extracted optimization logic for use in external compilation flows (like Latexmk)
@@ -152,14 +148,52 @@ impl Compiler {
 
     fn apply_draft_mode(&self, mut latex: String, draft: bool) -> String {
         if draft {
-            if latex.contains("\\documentclass") && !latex.contains("[draft]") {
-                latex = latex.replace("\\documentclass", "\\documentclass[draft]");
+            // Regex to find \documentclass and its optional arguments
+            let re = Regex::new(r"\\documentclass(?:\[([^\]]*)\])?\{([^}]+)\}").unwrap();
+            if let Some(caps) = re.captures(&latex) {
+                let options = caps.get(1).map(|m| m.as_str()).unwrap_or("");
+                let class = caps.get(2).map(|m| m.as_str()).unwrap_or("");
+                
+                if !options.contains("draft") {
+                    let new_options = if options.is_empty() {
+                        "draft".to_string()
+                    } else {
+                        format!("draft,{}", options)
+                    };
+                    let new_documentclass = format!("\\documentclass[{}]{{{}}}", new_options, class);
+                    latex = latex.replace(&caps[0], &new_documentclass);
+                }
             }
+            
             if let Some(pos) = latex.find("\\begin{document}") {
-                latex.insert_str(pos + "\\begin{document}".len(), "\n\\textbf{--- DRAFT MODE ACTIVE ---}\n");
+                let injection = "\n\\textbf{--- DRAFT MODE ACTIVE ---}\n";
+                if !latex.contains(injection) {
+                    latex.insert_str(pos + "\\begin{document}".len(), injection);
+                }
             }
         } else {
-            latex = latex.replace("\\documentclass[draft]", "\\documentclass");
+            // Remove draft from options if present
+            let re = Regex::new(r"\\documentclass\[([^\]]*)\]\{([^}]+)\}").unwrap();
+            if let Some(caps) = re.captures(&latex) {
+                let options = caps.get(1).map(|m| m.as_str()).unwrap_or("");
+                let class = caps.get(2).map(|m| m.as_str()).unwrap_or("");
+                
+                if options.contains("draft") {
+                    let new_options: Vec<&str> = options.split(',')
+                        .map(|s| s.trim())
+                        .filter(|&s| s != "draft")
+                        .collect();
+                    
+                    let new_documentclass = if new_options.is_empty() {
+                        format!("\\documentclass{{{}}}", class)
+                    } else {
+                        format!("\\documentclass[{}]{{{}}}", new_options.join(","), class)
+                    };
+                    latex = latex.replace(&caps[0], &new_documentclass);
+                }
+            }
+            // Also remove the draft mode visual indicator if it exists
+            latex = latex.replace("\n\\textbf{--- DRAFT MODE ACTIVE ---}\n", "");
         }
         latex
     }
