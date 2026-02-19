@@ -19,13 +19,13 @@ impl CompilerDaemon {
     }
 
     pub async fn run(mut self) {
-        let _compiler = Compiler::new();
+        let mut compiler = Compiler::new();
         while let Some(request) = self.receiver.recv().await {
             match request {
                 CompileRequest::Compile { latex, response } => {
                     // In real impl, use active VFS
                     let vfs = crate::vfs::Vfs::new();
-                    if let Ok(pdf) = Compiler::compile(&latex, &vfs) {
+                    if let Ok(pdf) = compiler.compile(&latex, &vfs) {
                         let _ = response.send(pdf);
                     }
                 }
