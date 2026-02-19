@@ -6,11 +6,20 @@ pub enum View {
     Editor,
 }
 
+pub struct ProjectItem {
+    pub name: String,
+    pub modified: String,
+    pub path: String,
+}
+
 pub struct Gui {
     pub view: View,
     pub ui_text: String,
     pub compile_status: String,
     pub selected_project: Option<String>,
+    pub dash_selected_index: usize,
+    pub search_text: String,
+    pub projects: Vec<ProjectItem>,
 }
 
 impl Gui {
@@ -20,6 +29,15 @@ impl Gui {
             ui_text: String::new(),
             compile_status: "Idle".to_string(),
             selected_project: None,
+            dash_selected_index: 0,
+            search_text: String::new(),
+            projects: vec![
+                ProjectItem { name: "Quantum Mech Notes".into(), modified: "2m ago".into(), path: "~/physics/mech.tex".into() },
+                ProjectItem { name: "Graph Theory HW".into(), modified: "1h ago".into(), path: "~/math/hw4.tex".into() },
+                ProjectItem { name: "Dissertation Draft".into(), modified: "3d ago".into(), path: "~/uni/thesis/main.tex".into() },
+                ProjectItem { name: "Abstract Algebra".into(), modified: "1w ago".into(), path: "~/math/algebra.tex".into() },
+                ProjectItem { name: "CV 2024".into(), modified: "2w ago".into(), path: "~/personal/cv.tex".into() },
+            ],
         }
     }
 
@@ -80,13 +98,27 @@ impl Gui {
     }
 
     fn draw_dashboard(&mut self, ctx: &egui::Context) {
+        // High-density keyboard navigation
+        if ctx.input(|i| i.key_pressed(egui::Key::ArrowDown)) {
+            self.dash_selected_index = (self.dash_selected_index + 1) % self.projects.len();
+        }
+        if ctx.input(|i| i.key_pressed(egui::Key::ArrowUp)) {
+            self.dash_selected_index = (self.dash_selected_index + self.projects.len() - 1) % self.projects.len();
+        }
+        if ctx.input(|i| i.key_pressed(egui::Key::Enter)) {
+            if let Some(p) = self.projects.get(self.dash_selected_index) {
+                self.view = View::Editor;
+                self.selected_project = Some(p.name.clone());
+            }
+        }
+
         egui::SidePanel::left("dashboard_sidebar")
-            .min_width(200.0)
+            .width_range(160.0..=160.0)
             .frame(egui::Frame::none().fill(Color32::from_rgb(13, 15, 17)))
             .show(ctx, |ui| {
                 ui.add_space(24.0);
                 ui.horizontal(|ui| {
-                    ui.add_space(64.0);
+                    ui.add_space(24.0);
                     ui.label(RichText::new("SokuTeX")
                         .font(FontId::new(16.0, egui::FontFamily::Name("logo_font".into())))
                         .color(Color32::WHITE));
@@ -94,13 +126,11 @@ impl Gui {
 
                 ui.add_space(32.0);
                 ui.vertical(|ui| {
-                    ui.spacing_mut().item_spacing.y = 8.0;
-                    
-                    self.nav_item(ui, "Recent", true);
-                    self.nav_item(ui, "Projects", false);
+                    ui.spacing_mut().item_spacing.y = 4.0;
+                    self.nav_item(ui, "Dashboard", true);
+                    self.nav_item(ui, "Library", false);
                     self.nav_item(ui, "Templates", false);
-                    
-                    ui.add_space(ui.available_height() - 60.0);
+                    ui.add_space(ui.available_height() - 40.0);
                     self.nav_item(ui, "Settings", false);
                 });
             });
@@ -108,105 +138,93 @@ impl Gui {
         egui::CentralPanel::default()
             .frame(egui::Frame::none().fill(Color32::from_rgb(10, 12, 14)))
             .show(ctx, |ui| {
-                ui.add_space(24.0);
+                ui.add_space(16.0);
                 ui.horizontal(|ui| {
-                    ui.add_space(32.0);
+                    ui.add_space(24.0);
                     
-                    // Search Bar Mock
+                    // Unified Search/Command Bar
                     egui::Frame::none()
                         .fill(Color32::from_rgb(18, 20, 23))
-                        .rounding(6.0)
+                        .rounding(4.0)
                         .stroke(egui::Stroke::new(1.0, Color32::from_rgb(30, 33, 38)))
                         .inner_margin(egui::Margin::symmetric(12.0, 6.0))
                         .show(ui, |ui| {
-                            ui.set_width(300.0);
+                            ui.set_width(400.0);
                             ui.horizontal(|ui| {
-                                ui.label(RichText::new("🔍").size(10.0));
-                                ui.label(RichText::new("Search documents...").color(Color32::from_rgb(80, 85, 95)).size(12.0));
+                                ui.label(RichText::new("⌘").color(Color32::from_rgb(80, 85, 95)));
+                                ui.add(egui::TextEdit::singleline(&mut self.search_text)
+                                    .hint_text("Search or run command...")
+                                    .frame(false)
+                                    .desired_width(f32::INFINITY));
                             });
                         });
                     
-                    ui.add_space(ui.available_width() - 120.0);
-                    
-                    // Profile Mock
+                    ui.add_space(ui.available_width() - 80.0);
+                    ui.label(RichText::new("KG").strong().color(Color32::WHITE));
+                });
+
+                ui.add_space(32.0);
+                
+                // High-Density Project List
+                egui::ScrollArea::vertical().show(ui, |ui| {
                     ui.horizontal(|ui| {
-                        ui.label(RichText::new("KG").color(Color32::WHITE).font(FontId::new(12.0, egui::FontFamily::Proportional)).strong());
-                        ui.add_space(4.0);
-                        egui::Frame::none()
-                            .fill(Color32::from_rgb(40, 45, 60))
-                            .rounding(4.0)
-                            .inner_margin(egui::Margin::symmetric(6.0, 2.0))
-                            .show(ui, |ui| {
-                                ui.label(RichText::new("PRO").color(Color32::from_rgb(150, 170, 255)).size(9.0).strong());
+                        ui.add_space(24.0);
+                        ui.vertical(|ui| {
+                            ui.horizontal(|ui| {
+                                ui.set_width(ui.available_width() - 24.0);
+                                ui.label(RichText::new("NAME").size(10.0).color(Color32::from_rgb(60, 65, 75)));
+                                ui.add_space(200.0);
+                                ui.label(RichText::new("PATH").size(10.0).color(Color32::from_rgb(60, 65, 75)));
+                                ui.add_space(ui.available_width() - 100.0);
+                                ui.label(RichText::new("MODIFIED").size(10.0).color(Color32::from_rgb(60, 65, 75)));
                             });
+                            ui.add_space(8.0);
+                            ui.separator();
+                            ui.add_space(8.0);
+
+                            for (i, project) in self.projects.iter().enumerate() {
+                                let is_selected = i == self.dash_selected_index;
+                                if self.project_row(ui, project, is_selected).clicked() {
+                                    self.view = View::Editor;
+                                    self.selected_project = Some(project.name.clone());
+                                }
+                            }
+                        });
                     });
                 });
-
-                ui.add_space(40.0);
-                ui.horizontal(|ui| {
-                    ui.add_space(32.0);
-                    ui.label(RichText::new("Recent Work").font(FontId::new(20.0, egui::FontFamily::Proportional)).color(Color32::WHITE).strong());
-                });
                 
-                ui.add_space(24.0);
-                
-                egui::ScrollArea::vertical().show(ui, |ui| {
-                    ui.horizontal_wrapped(|ui| {
-                        ui.add_space(32.0);
-                        ui.spacing_mut().item_spacing = egui::vec2(24.0, 24.0);
-                        
-                        // Action Card: Create New
-                        if self.project_card(ui, "+ New Project", "Create from template", true).clicked() {
-                            // Logic to create new
-                        }
-
-                        // Mock Projects
-                        if self.project_card(ui, "Quantum Mech Notes", "2 hours ago", false).clicked() {
-                            self.view = View::Editor;
-                            self.selected_project = Some("Quantum Mech Notes".into());
-                        }
-                        
-                        if self.project_card(ui, "Graph Theory HW", "Yesterday", false).clicked() {
-                            self.view = View::Editor;
-                            self.selected_project = Some("Graph Theory HW".into());
-                        }
-
-                        if self.project_card(ui, "Dissertation Draft", "3 days ago", false).clicked() {
-                            self.view = View::Editor;
-                            self.selected_project = Some("Dissertation Draft".into());
-                        }
+                // Keyboard hints
+                ui.with_layout(egui::Layout::bottom_up(egui::Align::RIGHT), |ui| {
+                    ui.add_space(16.0);
+                    ui.horizontal(|ui| {
+                        ui.label(RichText::new("↑↓ Navigate  •  ⏎ Open  •  ⌘N New").size(10.0).color(Color32::from_rgb(40, 45, 50)));
+                        ui.add_space(24.0);
                     });
                 });
             });
     }
 
-    fn project_card(&mut self, ui: &mut egui::Ui, title: &str, subtitle: &str, is_action: bool) -> egui::Response {
-        let (bg, border, text) = if is_action {
-            (Color32::from_rgb(30, 35, 45), Color32::from_rgb(50, 60, 80), Color32::WHITE)
-        } else {
-            (Color32::from_rgb(15, 17, 20), Color32::from_rgb(30, 33, 38), Color32::from_rgb(180, 190, 200))
-        };
+    fn project_row(&mut self, ui: &mut egui::Ui, project: &ProjectItem, selected: bool) -> egui::Response {
+        let bg = if selected { Color32::from_rgb(25, 28, 35) } else { Color32::TRANSPARENT };
+        let text_color = if selected { Color32::WHITE } else { Color32::from_rgb(160, 170, 180) };
 
         let response = egui::Frame::none()
             .fill(bg)
-            .rounding(8.0)
-            .stroke(egui::Stroke::new(1.0, border))
-            .inner_margin(egui::Margin::same(20.0))
+            .rounding(2.0)
+            .inner_margin(egui::Margin::symmetric(12.0, 8.0))
             .show(ui, |ui| {
-                ui.set_width(200.0);
-                ui.set_height(140.0);
-                ui.vertical(|ui| {
-                    ui.label(RichText::new(title).color(text).font(FontId::new(14.0, egui::FontFamily::Proportional)).strong());
-                    ui.add_space(4.0);
-                    ui.label(RichText::new(subtitle).color(Color32::from_rgb(100, 110, 120)).font(FontId::new(11.0, egui::FontFamily::Proportional)));
-                    
-                    ui.add_space(ui.available_height() - 20.0);
-                    ui.horizontal(|ui| {
-                        ui.label(RichText::new("LATEX").color(Color32::from_rgb(60, 70, 80)).font(FontId::new(9.0, egui::FontFamily::Monospace)));
+                ui.set_width(ui.available_width());
+                ui.horizontal(|ui| {
+                    ui.set_width(ui.available_width());
+                    ui.label(RichText::new(&project.name).color(text_color).font(FontId::new(13.0, egui::FontFamily::Proportional)));
+                    ui.add_space(150.0);
+                    ui.label(RichText::new(&project.path).size(11.0).color(Color32::from_rgb(60, 70, 80)));
+                    ui.with_layout(egui::Layout::right_to_right(egui::Align::Center), |ui| {
+                        ui.label(RichText::new(&project.modified).size(11.0).color(Color32::from_rgb(100, 110, 120)));
                     });
                 });
             }).response;
-        
+
         let response = response.interact(egui::Sense::click());
         if response.hovered() {
             ui.output_mut(|o| o.cursor_icon = egui::CursorIcon::PointingHand);
@@ -215,16 +233,17 @@ impl Gui {
     }
 
     fn nav_item(&mut self, ui: &mut egui::Ui, label: &str, active: bool) -> egui::Response {
-        let color = if active { Color32::WHITE } else { Color32::from_rgb(120, 130, 140) };
-        let bg = if active { Color32::from_rgb(25, 27, 30) } else { Color32::TRANSPARENT };
+        let color = if active { Color32::WHITE } else { Color32::from_rgb(100, 110, 120) };
+        let bg = if active { Color32::from_rgb(20, 22, 25) } else { Color32::TRANSPARENT };
         
         egui::Frame::none()
             .fill(bg)
-            .rounding(4.0)
-            .inner_margin(egui::Margin::symmetric(32.0, 8.0))
+            .rounding(2.0)
+            .inner_margin(egui::Margin::symmetric(16.0, 6.0))
             .show(ui, |ui| {
                 ui.horizontal(|ui| {
-                    ui.label(RichText::new(label).color(color).font(FontId::new(13.0, egui::FontFamily::Proportional)));
+                    ui.set_width(ui.available_width());
+                    ui.label(RichText::new(label).color(color).font(FontId::new(12.0, egui::FontFamily::Proportional)));
                 })
             }).response.interact(egui::Sense::click())
     }
