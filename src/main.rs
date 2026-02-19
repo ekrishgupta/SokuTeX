@@ -14,6 +14,7 @@ mod palette;
 mod vfs;
 mod io;
 mod compiler_daemon;
+mod synctex;
 
 use pdf_renderer::PdfRenderer;
 
