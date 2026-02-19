@@ -73,6 +73,23 @@ impl Gui {
     }
 
     pub fn draw(&mut self, ctx: &egui::Context, pdf_tex_id: Option<egui::TextureId>) {
+        match self.view {
+            View::Dashboard => self.draw_dashboard(ctx),
+            View::Editor => self.draw_editor(ctx, pdf_tex_id),
+        }
+    }
+
+    fn draw_dashboard(&mut self, ctx: &egui::Context) {
+        egui::CentralPanel::default()
+            .frame(egui::Frame::none().fill(Color32::from_rgb(10, 12, 14)))
+            .show(ctx, |ui| {
+                ui.centered_and_justified(|ui| {
+                    ui.label(RichText::new("Dashboard (Work In Progress)").color(Color32::WHITE));
+                });
+            });
+    }
+
+    fn draw_editor(&mut self, ctx: &egui::Context, pdf_tex_id: Option<egui::TextureId>) {
         egui::SidePanel::left("editor_panel")
             .min_width(350.0)
             .frame(egui::Frame::none().fill(Color32::from_rgb(10, 12, 14)))
@@ -103,7 +120,10 @@ impl Gui {
                                 self.compile_status = "BUSY".to_string();
                             }
                             let _ = ui.button(RichText::new("SYNC").size(9.0).strong());
-                            let _ = ui.button(RichText::new("PROJ").size(9.0).strong());
+                            
+                            if ui.button(RichText::new("STX").size(9.0).strong()).clicked() {
+                                self.view = View::Dashboard;
+                            }
                         });
                     });
                 
