@@ -4,6 +4,13 @@ use regex::Regex;
 use crate::vfs::Vfs;
 use crate::config::CompileBackend;
 use std::hash::{Hash, Hasher};
+use std::collections::HashSet;
+use log::info;
+
+use std::sync::OnceLock;
+
+static INCLUDE_REGEX: OnceLock<Regex> = OnceLock::new();
+static INCLUDE_INPUT_REGEX: OnceLock<Regex> = OnceLock::new();
 
 pub struct Compiler {
     cache: AHashMap<u64, Vec<u8>>,
@@ -42,25 +49,44 @@ impl Compiler {
         // 4. Execution
         let result = match self.backend {
             CompileBackend::Internal => self.compile_internal(&optimized_latex),
-            CompileBackend::Tectonic => self.compile_tectonic(&optimized_latex, vfs),
+            CompileBackend::Tectonic => self.compile_tectonic(&optimized_latex),
+            CompileBackend::Latexmk => {
+                return Err("Latexmk backend is handled asynchronously by the daemon".into());
+            }
         }?;
 
         self.cache.insert(final_hash, result.clone());
         Ok(result)
     }
 
+    fn compile_tectonic(&self, latex: &str) -> Result<Vec<u8>, Box<dyn Error>> {
+        // Tectonic: A complete, self-contained TeX/LaTeX engine
+        // Powered by XeTeX and TeXLive
+        Ok(tectonic::latex_to_pdf(latex)?)
+    }
+
     /// Extracted optimization logic for use in external compilation flows (like Latexmk)
     pub fn optimize_latex(&mut self, latex: &str, draft: bool, vfs: &Vfs) -> (String, bool) {
-        let all_deps = self.find_includes(latex);
-        let mut changed_subfiles = Vec::new();
+        // 1. Identify all top-level \include units
+        let include_re = INCLUDE_REGEX.get_or_init(|| Regex::new(r"\\include\{([^}]+)\}").unwrap());
+        let top_level_units: Vec<String> = include_re
+            .captures_iter(latex)
+            .map(|cap| cap[1].to_string())
+            .collect();
 
-        for dep in &all_deps {
-            let path = if dep.ends_with(".tex") {
-                dep.clone()
-            } else {
-                format!("{}.tex", dep)
-            };
+        if top_level_units.is_empty() {
+            return (self.apply_draft_mode(latex.to_string(), draft), false);
+        }
 
+        // 2. Track changes across the entire dependency tree
+        let mut changed_files = HashSet::new();
+        
+        // This is a bit expensive but necessary for "affected subtree" logic
+        // We could optimize by only scanning if we haven't scanned recently
+        let mut all_known_files = Vec::new();
+        self.collect_all_dependencies("main.tex", vfs, &mut all_known_files, &mut HashSet::new());
+
+        for path in all_known_files {
             if let Some(content) = vfs.read_file(&path) {
                 let mut hasher = ahash::AHasher::default();
                 content.hash(&mut hasher);
@@ -68,67 +94,90 @@ impl Compiler {
                 let old_hash = self.file_hashes.get(&path);
                 
                 if old_hash != Some(&hash) {
-                    changed_subfiles.push(dep.clone());
+                    changed_files.insert(path.clone());
                     self.file_hashes.insert(path, hash);
                 }
             }
         }
 
+        // 3. Determine which top-level units are affected
+        let mut affected_units = Vec::new();
+        for unit in &top_level_units {
+            let unit_path = if unit.ends_with(".tex") { unit.clone() } else { format!("{}.tex", unit) };
+            
+            // Check if unit itself changed
+            if changed_files.contains(&unit_path) {
+                affected_units.push(unit.clone());
+                continue;
+            }
+
+            // Check if any recursive dependency of this unit changed
+            let mut unit_deps = Vec::new();
+            self.collect_all_dependencies(&unit_path, vfs, &mut unit_deps, &mut HashSet::new());
+            
+            if unit_deps.iter().any(|d| changed_files.contains(d)) {
+                affected_units.push(unit.clone());
+            }
+        }
+
+        // 4. Priority: If we have an active file and it's in an include unit, we can just compile that
+        if let Some(ref active) = self.active_file {
+            let active_base = active.strip_suffix(".tex").unwrap_or(active);
+            if top_level_units.iter().any(|u| u == active_base) {
+                // If we are actively editing an include unit, it's the primary candidate for includeonly
+                if !affected_units.contains(&active_base.to_string()) {
+                    affected_units.push(active_base.to_string());
+                }
+            }
+        }
+
+        // 5. Automated Transparent \includeonly injection
         let mut optimized_latex = latex.to_string();
         let mut is_incremental = false;
 
-        // Dynamic \includeonly Optimization
-        let mut target_includes = changed_subfiles;
-        
-        // If there's an active file in the editor, prioritize it to force LaTeX to skip others
-        if let Some(ref active) = self.active_file {
-            let active_base = active.strip_suffix(".tex").unwrap_or(active);
-            // Only use it if it's actually part of the includes
-            if all_deps.iter().any(|d| d == active_base) {
-                target_includes = vec![active_base.to_string()];
-            }
-        }
-
-        // Only inject \includeonly for files that are actually using \include (not \input)
-        let actual_includes: Vec<String> = Regex::new(r"\\include\{([^}]+)\}")
-            .unwrap()
-            .captures_iter(latex)
-            .map(|cap| cap[1].to_string())
-            .collect();
-
-        let final_targets: Vec<String> = target_includes.into_iter()
-            .filter(|t| actual_includes.contains(t))
-            .collect();
-
-        if !final_targets.is_empty() && final_targets.len() < actual_includes.len() {
-            let include_only = format!("\\includeonly{{{}}}\n", final_targets.join(","));
+        // Only inject if we have a subset of units affected
+        // If everything changed or nothing changed (first compile), we don't necessarily want \includeonly
+        // unless we want to force focus on what the user is editing.
+        if !affected_units.is_empty() && affected_units.len() < top_level_units.len() {
+            let include_only = format!("\\includeonly{{{}}}\n", affected_units.join(","));
             if let Some(pos) = optimized_latex.find("\\begin{document}") {
                 optimized_latex.insert_str(pos, &include_only);
                 is_incremental = true;
+                info!("Incremental: only recompiling affected subtree: {:?}", affected_units);
             }
         }
 
-
-        if draft {
-            if optimized_latex.contains("\\documentclass") && !optimized_latex.contains("[draft]") {
-                optimized_latex = optimized_latex.replace("\\documentclass", "\\documentclass[draft]");
-            }
-            if let Some(pos) = optimized_latex.find("\\begin{document}") {
-                optimized_latex.insert_str(pos + "\\begin{document}".len(), "\n\\textbf{--- DRAFT MODE ACTIVE ---}\n");
-            }
-        } else {
-            optimized_latex = optimized_latex.replace("\\documentclass[draft]", "\\documentclass");
-        }
-
-        (optimized_latex, is_incremental)
+        (self.apply_draft_mode(optimized_latex, draft), is_incremental)
     }
 
-    fn find_includes(&self, latex: &str) -> Vec<String> {
-        // Matches both \include{file} and \input{file} for broader dependency tracking
-        let re = Regex::new(r"\\(?:include|input)\{([^}]+)\}").expect("Invalid regex");
-        re.captures_iter(latex)
-            .map(|cap| cap[1].to_string())
-            .collect()
+    fn apply_draft_mode(&self, mut latex: String, draft: bool) -> String {
+        if draft {
+            if latex.contains("\\documentclass") && !latex.contains("[draft]") {
+                latex = latex.replace("\\documentclass", "\\documentclass[draft]");
+            }
+            if let Some(pos) = latex.find("\\begin{document}") {
+                latex.insert_str(pos + "\\begin{document}".len(), "\n\\textbf{--- DRAFT MODE ACTIVE ---}\n");
+            }
+        } else {
+            latex = latex.replace("\\documentclass[draft]", "\\documentclass");
+        }
+        latex
+    }
+
+    fn collect_all_dependencies(&self, path: &str, vfs: &Vfs, out: &mut Vec<String>, visited: &mut HashSet<String>) {
+        if visited.contains(path) { return; }
+        visited.insert(path.to_string());
+        
+        if let Some(content_bytes) = vfs.read_file(path) {
+            let content = String::from_utf8_lossy(&content_bytes);
+            let re = INCLUDE_INPUT_REGEX.get_or_init(|| Regex::new(r"\\(?:include|input)\{([^}]+)\}").unwrap());
+            for cap in re.captures_iter(&content) {
+                let mut sub = cap[1].to_string();
+                if !sub.ends_with(".tex") { sub.push_str(".tex"); }
+                out.push(sub.clone());
+                self.collect_all_dependencies(&sub, vfs, out, visited);
+            }
+        }
     }
 
     fn compile_internal(&self, latex: &str) -> Result<Vec<u8>, Box<dyn Error>> {
@@ -158,43 +207,4 @@ impl Compiler {
         Ok(pdf.into_bytes())
     }
 
-    fn compile_tectonic(&self, latex: &str, vfs: &Vfs) -> Result<Vec<u8>, Box<dyn Error>> {
-        use tectonic::driver::{Driver, DriverHooks};
-        use tectonic::io::memory::MemoryIo;
-        use tectonic::status::plain::PlainStatusBackend;
-        use tectonic::config::PersistentConfig;
-
-        let mut mem_io = MemoryIo::new();
-        
-        // Populate MemoryIo from VFS
-        for entry in vfs.get_all_files() {
-            mem_io.write_file(entry.key(), entry.value().clone())
-                .map_err(|e| format!("VFS sync failed: {}", e))?;
-        }
-
-        // Write the main document (which might be optimized_latex)
-        mem_io.write_file("main.tex", latex.as_bytes().to_vec())
-            .map_err(|e| format!("Main file sync failed: {}", e))?;
-
-        let config = PersistentConfig::default();
-        let mut status = PlainStatusBackend::new();
-        
-        // Tectonic's default bundle
-        let bundle = tectonic::io::ite_bundle::IteBundle::default();
-
-        let mut hooks = DriverHooks::new(
-            Box::new(mem_io),
-            Box::new(bundle),
-            Box::new(status),
-        );
-
-        let mut driver = Driver::new(&config);
-        driver.run(&mut hooks, "main.tex")
-            .map_err(|e| format!("Tectonic compilation failed: {}", e))?;
-
-        let output_files = hooks.io.into_inner().unwrap().into_inner();
-        output_files.get("main.pdf")
-            .cloned()
-            .ok_or_else(|| "Tectonic produced no PDF output".into())
-    }
 }
