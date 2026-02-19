@@ -72,12 +72,18 @@ async fn main() {
                             // Basic text input for now
                             if c.chars().count() == 1 {
                                 editor.insert_char(c.chars().next().unwrap());
-                                println!("Editor text: {}", editor.get_text());
+                                let text = editor.get_text();
+                                tokio::spawn(async move {
+                                    let _ = io::IoHandler::auto_save(text, "autosave.tex").await;
+                                });
                             }
                         }
                         Key::Named(NamedKey::Backspace) => {
                             editor.delete_back();
-                            println!("Editor text: {}", editor.get_text());
+                            let text = editor.get_text();
+                            tokio::spawn(async move {
+                                let _ = io::IoHandler::auto_save(text, "autosave.tex").await;
+                            });
                         }
                         Key::Named(NamedKey::ArrowLeft) => {
                             editor.move_left();
