@@ -18,6 +18,7 @@ pub enum CompileRequest {
         latex: String,
         backend: CompileBackend,
         draft: bool,
+        active_file: Option<String>,
         response: oneshot::Sender<CompileResult>,
     },
 }
@@ -52,8 +53,9 @@ impl CompilerDaemon {
             tokio::select! {
                 Some(request) = self.receiver.recv() => {
                     match request {
-                        CompileRequest::Compile { latex, backend, draft, response } => {
+                        CompileRequest::Compile { latex, backend, draft, active_file, response } => {
                             self.compiler.set_backend(backend);
+                            self.compiler.active_file = active_file;
 
                             if backend == CompileBackend::Latexmk {
                                 // Incremental Optimization: Inject \includeonly if possible
