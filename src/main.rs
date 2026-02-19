@@ -63,11 +63,26 @@ async fn main() {
                         ..
                     } => match logical_key {
                         Key::Named(NamedKey::Escape) => target.exit(),
-                        Key::Character(c) if c == "p" => {
-                            if modifiers.state().super_key() || modifiers.state().control_key() {
-                                palette.toggle();
-                                println!("Palette visible: {}", palette.visible);
+                        Key::Character(c) if c == "p" && (modifiers.state().super_key() || modifiers.state().control_key()) => {
+                            palette.toggle();
+                            println!("Palette visible: {}", palette.visible);
+                        }
+                        Key::Character(c) => {
+                            // Basic text input for now
+                            if c.chars().count() == 1 {
+                                editor.insert_char(c.chars().next().unwrap());
+                                println!("Editor text: {}", editor.get_text());
                             }
+                        }
+                        Key::Named(NamedKey::Backspace) => {
+                            editor.delete_back();
+                            println!("Editor text: {}", editor.get_text());
+                        }
+                        Key::Named(NamedKey::ArrowLeft) => {
+                            editor.move_left();
+                        }
+                        Key::Named(NamedKey::ArrowRight) => {
+                            editor.move_right();
                         }
                         _ => {}
                     },
