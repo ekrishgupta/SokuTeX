@@ -10,6 +10,7 @@ pub struct State<'a> {
     render_pipeline: wgpu::RenderPipeline,
     bind_group: wgpu::BindGroup,
     texture_bind_group_layout: wgpu::BindGroupLayout, 
+    app_config: crate::config::Config,
 }
 
 impl<'a> State<'a> {
@@ -207,6 +208,7 @@ impl<'a> State<'a> {
             render_pipeline,
             bind_group,
             texture_bind_group_layout,
+            app_config: crate::config::Config::default(),
         }
     }
 
@@ -305,10 +307,10 @@ impl<'a> State<'a> {
                     resolve_target: None,
                     ops: wgpu::Operations {
                         load: wgpu::LoadOp::Clear(wgpu::Color {
-                            r: 0.1,
-                            g: 0.2,
-                            b: 0.3,
-                            a: 1.0,
+                            r: self.app_config.background_color[0] as f64,
+                            g: self.app_config.background_color[1] as f64,
+                            b: self.app_config.background_color[2] as f64,
+                            a: self.app_config.background_color[3] as f64,
                         }),
                         store: wgpu::StoreOp::Store,
                     },
