@@ -3,6 +3,7 @@ use ropey::Rope;
 pub struct Editor {
     pub buffer: Rope,
     pub cursor: usize,
+    pub entries: Vec<crate::bib::BibEntry>,
 }
 
 impl Editor {
@@ -10,6 +11,7 @@ impl Editor {
         Self {
             buffer: Rope::new(),
             cursor: 0,
+            entries: Vec::new(),
         }
     }
 
