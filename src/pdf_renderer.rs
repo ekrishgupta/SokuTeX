@@ -36,10 +36,13 @@ impl PdfRenderer {
         let samples = pixmap.samples();
         
         // Convert to BGRA
-        let bgra_samples: Vec<u8> = samples
-            .chunks_exact(3)
-            .flat_map(|rgb| [rgb[2], rgb[1], rgb[0], 255])
-            .collect();
+        let mut bgra_samples = vec![0u8; (samples.len() / 3) * 4];
+        for (src, dst) in samples.chunks_exact(3).zip(bgra_samples.chunks_exact_mut(4)) {
+            dst[0] = src[2];
+            dst[1] = src[1];
+            dst[2] = src[0];
+            dst[3] = 255;
+        }
         
         self.cache.insert(key, bgra_samples.clone());
         Ok(bgra_samples)
