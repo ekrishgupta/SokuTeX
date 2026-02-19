@@ -1,5 +1,14 @@
 use winit::window::Window;
 
+use winit::window::Window;
+use bytemuck::{Pod, Zeroable};
+
+#[repr(C)]
+#[derive(Copy, Clone, Debug, Pod, Zeroable)]
+pub struct PdfUniforms {
+    pub transform: [[f32; 4]; 4],
+}
+
 pub struct State<'a> {
     surface: wgpu::Surface<'a>,
     pub device: wgpu::Device,
@@ -19,6 +28,11 @@ pub struct State<'a> {
     pub pdf_texture_id: Option<egui::TextureId>,
     pdf_view: Option<wgpu::TextureView>,
     pdf_texture: Option<wgpu::Texture>,
+
+    // Tile-based rendering and custom shader
+    pub uniforms: PdfUniforms,
+    pub uniform_buffer: wgpu::Buffer,
+    pub uniform_bind_group: wgpu::BindGroup,
 }
 
 impl<'a> State<'a> {
@@ -80,6 +94,49 @@ impl<'a> State<'a> {
             source: wgpu::ShaderSource::Wgsl(include_str!("shader.wgsl").into()),
         });
 
+        // Create uniform buffer
+        let uniforms = PdfUniforms {
+            transform: [
+                [1.0, 0.0, 0.0, 0.0],
+                [0.0, 1.0, 0.0, 0.0],
+                [0.0, 0.0, 1.0, 0.0],
+                [0.0, 0.0, 0.0, 1.0],
+            ],
+        };
+        let uniform_buffer = device.create_buffer(&wgpu::BufferDescriptor {
+            label: Some("Uniform Buffer"),
+            size: std::mem::size_of::<PdfUniforms>() as u64,
+            usage: wgpu::BufferUsages::UNIFORM | wgpu::BufferUsages::COPY_DST,
+            mapped_at_creation: false,
+        });
+
+        let uniform_bind_group_layout = device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
+            entries: &[
+                wgpu::BindGroupLayoutEntry {
+                    binding: 0,
+                    visibility: wgpu::ShaderStages::VERTEX | wgpu::ShaderStages::FRAGMENT,
+                    ty: wgpu::BindingType::Buffer {
+                        ty: wgpu::BufferBindingType::Uniform,
+                        has_dynamic_offset: false,
+                        min_binding_size: None,
+                    },
+                    count: None,
+                },
+            ],
+            label: Some("uniform_bind_group_layout"),
+        });
+
+        let uniform_bind_group = device.create_bind_group(&wgpu::BindGroupDescriptor {
+            layout: &uniform_bind_group_layout,
+            entries: &[
+                wgpu::BindGroupEntry {
+                    binding: 0,
+                    resource: uniform_buffer.as_entire_binding(),
+                },
+            ],
+            label: Some("uniform_bind_group"),
+        });
+
         // Create texture bind group layout
         let texture_bind_group_layout =
             device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
@@ -108,7 +165,7 @@ impl<'a> State<'a> {
         let render_pipeline_layout =
             device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
                 label: Some("Render Pipeline Layout"),
-                bind_group_layouts: &[&texture_bind_group_layout],
+                bind_group_layouts: &[&texture_bind_group_layout, &uniform_bind_group_layout],
                 push_constant_ranges: &[],
             });
 
@@ -235,6 +292,9 @@ impl<'a> State<'a> {
             pdf_texture_id: None,
             pdf_view: None,
             pdf_texture: None,
+            uniforms,
+            uniform_buffer,
+            uniform_bind_group,
         }
     }
 
@@ -258,20 +318,41 @@ impl<'a> State<'a> {
             height,
             depth_or_array_layers: 1,
         };
-        let texture = self.device.create_texture(&wgpu::TextureDescriptor {
-            label: Some("pdf_texture"),
-            size,
-            mip_level_count: 1,
-            sample_count: 1,
-            dimension: wgpu::TextureDimension::D2,
-            format: wgpu::TextureFormat::Bgra8Unorm,
-            usage: wgpu::TextureUsages::TEXTURE_BINDING | wgpu::TextureUsages::COPY_DST,
-            view_formats: &[],
-        });
+
+        let texture_matches = if let Some(ref tex) = self.pdf_texture {
+            tex.width() == width && tex.height() == height
+        } else {
+            false
+        };
+
+        if !texture_matches {
+            let texture = self.device.create_texture(&wgpu::TextureDescriptor {
+                label: Some("pdf_texture"),
+                size,
+                mip_level_count: 1,
+                sample_count: 1,
+                dimension: wgpu::TextureDimension::D2,
+                format: wgpu::TextureFormat::Bgra8Unorm,
+                usage: wgpu::TextureUsages::TEXTURE_BINDING | wgpu::TextureUsages::COPY_DST,
+                view_formats: &[],
+            });
+            
+            let view = texture.create_view(&wgpu::TextureViewDescriptor::default());
+            
+            // Register with egui
+            if let Some(tid) = self.pdf_texture_id {
+                self.egui_renderer.free_texture(&tid);
+            }
+            self.pdf_texture_id = Some(self.egui_renderer.register_native_texture(&self.device, &view, wgpu::FilterMode::Linear));
+            self.pdf_view = Some(view);
+            self.pdf_texture = Some(texture);
+        }
         
+        let texture = self.pdf_texture.as_ref().unwrap();
+
         self.queue.write_texture(
              wgpu::ImageCopyTexture {
-                texture: &texture,
+                texture: texture,
                 mip_level: 0,
                 origin: wgpu::Origin3d::ZERO,
                 aspect: wgpu::TextureAspect::All,
@@ -285,7 +366,6 @@ impl<'a> State<'a> {
             size,
         );
         
-        let view = texture.create_view(&wgpu::TextureViewDescriptor::default());
         let sampler = self.device.create_sampler(&wgpu::SamplerDescriptor {
             address_mode_u: wgpu::AddressMode::ClampToEdge,
             address_mode_v: wgpu::AddressMode::ClampToEdge,
@@ -296,15 +376,7 @@ impl<'a> State<'a> {
             ..Default::default()
         });
         
-        // Register with egui
-        if let Some(tid) = self.pdf_texture_id {
-            self.egui_renderer.free_texture(&tid);
-        }
-        self.pdf_texture_id = Some(self.egui_renderer.register_native_texture(&self.device, &view, wgpu::FilterMode::Linear));
-        self.pdf_view = Some(view);
-        self.pdf_texture = Some(texture);
-
-        // Update raw wgpu bind group too (for fallback/direct rendering if needed)
+        // Update raw wgpu bind group too
         let view_ref = self.pdf_view.as_ref().unwrap();
         self.bind_group = self.device.create_bind_group(&wgpu::BindGroupDescriptor {
             layout: &self.texture_bind_group_layout,
@@ -320,6 +392,11 @@ impl<'a> State<'a> {
             ],
             label: Some("pdf_bind_group"),
         });
+    }
+
+    pub fn update_uniforms(&mut self, transform: [[f32; 4]; 4]) {
+        self.uniforms.transform = transform;
+        self.queue.write_buffer(&self.uniform_buffer, 0, bytemuck::cast_slice(&[self.uniforms]));
     }
 
     pub fn render(&mut self, window: &Window, run_ui: impl FnOnce(&egui::Context)) -> Result<(), wgpu::SurfaceError> {
@@ -368,13 +445,25 @@ impl<'a> State<'a> {
                 timestamp_writes: None,
             });
             
-            // Optionally Draw raw background here
-            // render_pass.set_pipeline(&self.render_pipeline);
-            // render_pass.set_bind_group(0, &self.bind_group, &[]);
-            // render_pass.draw(0..3, 0..1);
+            // Custom PDF background rendering with shader
+            render_pass.set_pipeline(&self.render_pipeline);
+            render_pass.set_bind_group(0, &self.bind_group, &[]);
+            render_pass.set_bind_group(1, &self.uniform_bind_group, &[]);
+            render_pass.draw(0..3, 0..1);
 
             self.egui_renderer.render(&mut render_pass, &paint_jobs, &screen_descriptor);
         }
+
+        for id in &full_output.textures_delta.free {
+            self.egui_renderer.free_texture(id);
+        }
+
+        self.queue.submit(std::iter::once(encoder.finish()));
+        output.present();
+
+        Ok(())
+    }
+
 
         for id in &full_output.textures_delta.free {
             self.egui_renderer.free_texture(id);
