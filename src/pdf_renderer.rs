@@ -6,14 +6,12 @@ use ahash::RandomState;
 
 pub struct PdfRenderer {
     cache: Arc<DashMap<(u64, u16, u16, i32), Arc<Vec<u8>>, RandomState>>,
-    doc_cache: DashMap<u64, Arc<Document>, RandomState>,
 }
 
 impl PdfRenderer {
     pub fn new() -> Result<Self, Box<dyn Error>> {
         Ok(Self {
             cache: Arc::new(DashMap::with_hasher(RandomState::new())),
-            doc_cache: DashMap::with_hasher(RandomState::new()),
         })
     }
 
@@ -25,14 +23,7 @@ impl PdfRenderer {
             return Ok(cached.value().clone());
         }
 
-        let document = if let Some(doc) = self.doc_cache.get(&revision) {
-            doc.value().clone()
-        } else {
-            let doc = Arc::new(Document::from_bytes(pdf_data, "")?);
-            self.doc_cache.insert(revision, doc.clone());
-            doc
-        };
-
+        let document = Document::from_bytes(pdf_data, "")?;
         let page = document.load_page(page_index)?;
         
         let bounds = page.bounds()?;
@@ -59,3 +50,4 @@ impl PdfRenderer {
         Ok(arc_samples)
     }
 }
+
