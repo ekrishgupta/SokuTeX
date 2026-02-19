@@ -131,9 +131,86 @@ impl Gui {
     }
 
     pub fn draw(&mut self, ctx: &egui::Context, pdf_tex_id: Option<egui::TextureId>) {
+        if ctx.input(|i| i.modifiers.command && i.key_pressed(egui::Key::K)) {
+            self.show_command_palette = !self.show_command_palette;
+        }
+
         match self.view {
             View::Dashboard => self.draw_dashboard(ctx),
             View::Editor => self.draw_editor(ctx, pdf_tex_id),
+        }
+
+        if self.show_command_palette {
+            self.draw_command_palette(ctx);
+        }
+    }
+
+    fn draw_command_palette(&mut self, ctx: &egui::Context) {
+        if ctx.input(|i| i.key_pressed(egui::Key::Escape)) {
+            self.show_command_palette = false;
+        }
+
+        egui::Window::new("command_palette")
+            .collapsible(false)
+            .title_bar(false)
+            .resizable(false)
+            .anchor(egui::Align2::CENTER_TOP, [0.0, 100.0])
+            .fixed_size([500.0, 300.0])
+            .frame(egui::Frame::none()
+                .fill(Color32::from_rgb(15, 17, 20))
+                .rounding(8.0)
+                .stroke(egui::Stroke::new(1.0, Color32::from_rgb(40, 45, 50)))
+                .shadow(egui::epaint::Shadow { 
+                    extrusion: 30.0, 
+                    color: Color32::from_black_alpha(150) 
+                }))
+            .show(ctx, |ui| {
+                ui.vertical(|ui| {
+                    // Search area
+                    egui::Frame::none()
+                        .inner_margin(egui::Margin::symmetric(16.0, 12.0))
+                        .show(ui, |ui| {
+                            ui.horizontal(|ui| {
+                                ui.label(RichText::new("🔍").size(14.0));
+                                let resp = ui.add(egui::TextEdit::singleline(&mut self.command_search_text)
+                                    .hint_text("Search actions or projects...")
+                                    .frame(false)
+                                    .desired_width(f32::INFINITY)
+                                    .font(FontId::proportional(14.0)));
+                                resp.request_focus();
+                            });
+                        });
+                    
+                    ui.separator();
+                    
+                    // Results area
+                    egui::ScrollArea::vertical().show(ui, |ui| {
+                        ui.add_space(8.0);
+                        self.command_item(ui, "🏠 Go to Dashboard", "View your projects");
+                        self.command_item(ui, "🚀 Compile Document", "Run Tectonic on current file");
+                        self.command_item(ui, "📚 Open Library", "Browse your LaTeX collection");
+                        self.command_item(ui, "🎨 Change Theme", "Switch high-contrast or light mode");
+                        ui.add_space(8.0);
+                    });
+                });
+            });
+    }
+
+    fn command_item(&mut self, ui: &mut egui::Ui, title: &str, subtitle: &str) {
+        let response = egui::Frame::none()
+            .inner_margin(egui::Margin::symmetric(16.0, 8.0))
+            .show(ui, |ui| {
+                ui.set_width(ui.available_width());
+                ui.vertical(|ui| {
+                    ui.label(RichText::new(title).color(Color32::WHITE).size(13.0));
+                    ui.label(RichText::new(subtitle).color(Color32::from_rgb(80, 85, 95)).size(10.0));
+                });
+            }).response;
+        
+        let response = response.interact(egui::Sense::click());
+        if response.hovered() {
+            ui.painter().rect_filled(response.rect, 2.0, Color32::from_rgb(25, 28, 32));
+            ui.output_mut(|o| o.cursor_icon = egui::CursorIcon::PointingHand);
         }
     }
 
