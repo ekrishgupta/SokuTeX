@@ -2,17 +2,18 @@ use mupdf::{Document, Colorspace, Matrix};
 use std::error::Error;
 use dashmap::DashMap;
 use std::sync::Arc;
+use ahash::RandomState;
 
 pub struct PdfRenderer {
-    cache: Arc<DashMap<(u64, u16, u16, i32), Arc<Vec<u8>>>>,
-    doc_cache: DashMap<u64, Arc<Document>>,
+    cache: Arc<DashMap<(u64, u16, u16, i32), Arc<Vec<u8>>, RandomState>>,
+    doc_cache: DashMap<u64, Arc<Document>, RandomState>,
 }
 
 impl PdfRenderer {
     pub fn new() -> Result<Self, Box<dyn Error>> {
         Ok(Self {
-            cache: Arc::new(DashMap::new()),
-            doc_cache: DashMap::new(),
+            cache: Arc::new(DashMap::with_hasher(RandomState::new())),
+            doc_cache: DashMap::with_hasher(RandomState::new()),
         })
     }
 
