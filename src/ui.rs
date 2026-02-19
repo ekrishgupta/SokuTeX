@@ -32,8 +32,15 @@ pub struct CompileError {
     pub message: String,
 }
 
+#[derive(PartialEq, Clone, Copy)]
+pub enum LatexTheme {
+    Midnight,
+    SoftGray,
+}
+
 pub struct Gui {
     pub view: View,
+    pub theme: LatexTheme,
     pub active_tab: DashTab,
     pub ui_text: String,
     pub compile_status: String,
@@ -53,6 +60,7 @@ impl Gui {
     pub fn new() -> Self {
         Self {
             view: View::Dashboard,
+            theme: LatexTheme::Midnight,
             active_tab: DashTab::Dashboard,
             ui_text: String::new(),
             compile_status: "Idle".to_string(),
