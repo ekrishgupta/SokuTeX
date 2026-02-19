@@ -1,4 +1,6 @@
 use egui::{Color32, FontId, RichText, Visuals};
+use crate::dependencies::{DependencyNode, DependencyScanner};
+
 
 #[derive(PartialEq)]
 pub enum View {
@@ -59,6 +61,13 @@ pub struct Gui {
     pub compile_timer: std::time::Instant,
     pub compile_requested: bool,
     pub autocomplete: crate::autocomplete::AutocompleteEngine,
+    pub draft_mode: bool,
+    pub compile_backend: crate::config::CompileBackend,
+    pub dependency_tree: Option<DependencyNode>,
+    pub show_dependencies: bool,
+    pub synctex: Option<crate::synctex::SyncTex>,
+    pub sync_to_editor_request: Option<u32>, // line to scroll to
+    pub sync_to_pdf_request: bool,
 }
 
 impl Gui {
@@ -97,6 +106,13 @@ impl Gui {
             compile_timer: std::time::Instant::now(),
             compile_requested: false,
             autocomplete: crate::autocomplete::AutocompleteEngine::new(),
+            draft_mode: false,
+            compile_backend: crate::config::CompileBackend::Internal,
+            dependency_tree: None,
+            show_dependencies: true,
+            synctex: None,
+            sync_to_editor_request: None,
+            sync_to_pdf_request: false,
         }
     }
 
@@ -663,15 +679,67 @@ impl Gui {
                                 self.compile_status = "BUSY".to_string();
                                 self.show_errors = !self.show_errors; // Toggle for demo
                             }
-                            let _ = ui.button(RichText::new("SYNC").size(9.0).strong());
+                            
+                            let draft_text = if self.draft_mode { "DRAFT: ON" } else { "DRAFT: OFF" };
+                            if ui.button(RichText::new(draft_text).size(9.0).strong()).clicked() {
+                                self.draft_mode = !self.draft_mode;
+                                self.compile_requested = true; // Trigger re-compile on toggle
+                            }
+
+                            if ui.button(RichText::new("SYNC").size(9.0).strong()).clicked() {
+                                self.sync_to_pdf_request = true;
+                            }
                             
                             if ui.button(RichText::new("STX").size(9.0).strong()).clicked() {
                                 self.view = View::Dashboard;
+                            }
+
+                            ui.separator();
+                            
+                            egui::ComboBox::from_id_source("backend_selector")
+                                .selected_text(RichText::new(format!("{:?}", self.compile_backend)).size(9.0).strong())
+                                .width(80.0)
+                                .show_ui(ui, |ui| {
+                                    use crate::config::CompileBackend;
+                                    ui.selectable_value(&mut self.compile_backend, CompileBackend::Internal, "Internal");
+                                    ui.selectable_value(&mut self.compile_backend, CompileBackend::Tectonic, "Tectonic");
+                                    ui.selectable_value(&mut self.compile_backend, CompileBackend::Latexmk, "Latexmk");
+                                });
+
+                            if ui.button(RichText::new("TREE").size(9.0).strong()).clicked() {
+                                self.show_dependencies = !self.show_dependencies;
                             }
                         });
                     });
                 
                 ui.add_space(4.0);
+
+                if self.show_dependencies {
+                    egui::SidePanel::left("dependency_tree_panel")
+                        .resizable(true)
+                        .default_width(150.0)
+                        .width_range(100.0..=300.0)
+                        .frame(egui::Frame::none().fill(Color32::from_rgb(13, 15, 17)))
+                        .show_inside(ui, |ui| {
+                            ui.add_space(8.0);
+                            ui.horizontal(|ui| {
+                                ui.add_space(16.0);
+                                ui.label(RichText::new("PROJECT TREE").size(10.0).color(Color32::from_rgb(100, 110, 120)).strong());
+                            });
+                            ui.add_space(8.0);
+                            
+                            egui::ScrollArea::vertical().show(ui, |ui| {
+                                if let Some(ref tree) = self.dependency_tree {
+                                    self.render_node_recursive(ui, tree);
+                                } else {
+                                    ui.horizontal(|ui| {
+                                        ui.add_space(16.0);
+                                        ui.label(RichText::new("No dependencies found").size(11.0).color(Color32::from_rgb(60, 65, 75)));
+                                    });
+                                }
+                            });
+                        });
+                }
 
                 if self.show_errors {
                     egui::TopBottomPanel::bottom("error_gutter")
@@ -757,8 +825,30 @@ impl Gui {
             .frame(egui::Frame::none().fill(Color32::from_rgb(255, 255, 255))) // PDF usually white base
             .show(ctx, |ui| {
                 if let Some(tex_id) = pdf_tex_id {
-                    // Fill vertically and horizontally
-                    ui.image(egui::load::SizedTexture::new(tex_id, ui.available_size()));
+                    let image_size = ui.available_size();
+                    let response = ui.image(egui::load::SizedTexture::new(tex_id, image_size));
+                    
+                    if response.double_clicked() {
+                        if let Some(pos) = response.interact_pointer_pos() {
+                            let relative_pos = pos - response.rect.min;
+                            let x_ratio = relative_pos.x / image_size.x;
+                            let y_ratio = relative_pos.y / image_size.y;
+                            
+                            if let Some(ref stx) = self.synctex {
+                                // PDF coordinates are usually in points (1/72 inch).
+                                // SyncTeX also uses points, but sometimes scaled.
+                                // We assume the PDF renderer output matches the PDF page size.
+                                // In a more robust implementation, we'd need page dimensions.
+                                // For now, let's assume standard A4 or Letter (around 600-800 points).
+                                let pdf_x = x_ratio * 612.0; // Assume Letter width
+                                let pdf_y = y_ratio * 792.0; // Assume Letter height
+                                
+                                if let Some(node) = stx.backward_sync(1, pdf_x, pdf_y) {
+                                    self.sync_to_editor_request = Some(node.line);
+                                }
+                            }
+                        }
+                    }
                 } else {
                     ui.centered_and_justified(|ui| {
                         ui.label(RichText::new("...").color(Color32::from_rgb(200, 200, 200)));
@@ -766,4 +856,30 @@ impl Gui {
                 }
             });
     }
+
+    fn render_node_recursive(&self, ui: &mut egui::Ui, node: &DependencyNode) {
+        let has_children = !node.children.is_empty();
+        
+        let label = RichText::new(format!("📄 {}", node.name))
+            .size(12.0)
+            .color(if has_children { Color32::WHITE } else { Color32::from_rgb(160, 170, 180) });
+
+        if has_children {
+            egui::collapsing_header::CollapsingState::load_with_default_open(ui.ctx(), ui.make_persistent_id(&node.name), true)
+                .show_header(ui, |ui| {
+                    ui.label(label);
+                })
+                .body(|ui| {
+                    for child in &node.children {
+                        self.render_node_recursive(ui, child);
+                    }
+                });
+        } else {
+            ui.horizontal(|ui| {
+                ui.add_space(16.0);
+                ui.label(label);
+            });
+        }
+    }
 }
+
