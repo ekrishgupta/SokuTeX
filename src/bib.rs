@@ -31,7 +31,7 @@ impl BibParser {
 
             for f_cap in field_re.captures_iter(fields_content) {
                 let name = f_cap[1].to_lowercase();
-                let value = f_cap.get(2).or(f_cap.get(3)).map(|m| m.as_str().trim().to_string());
+                let value = f_cap.get(2).or(f_cap.get(3)).map(|m: regex::Match| m.as_str().trim().to_string());
 
                 match name.as_str() {
                     "author" => author = value,
