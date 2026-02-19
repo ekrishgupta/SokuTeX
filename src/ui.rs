@@ -44,6 +44,8 @@ pub struct Gui {
     pub templates: Vec<Template>,
     pub errors: Vec<CompileError>,
     pub show_errors: bool,
+    pub show_command_palette: bool,
+    pub command_search_text: String,
 }
 
 impl Gui {
@@ -74,6 +76,8 @@ impl Gui {
                 CompileError { line: 12, message: "Undefined control sequence \\textbfz".into() },
             ],
             show_errors: false,
+            show_command_palette: false,
+            command_search_text: String::new(),
         }
     }
 
