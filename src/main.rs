@@ -3,7 +3,6 @@ use winit::{
     event_loop::{ControlFlow, EventLoop},
     window::WindowBuilder,
     keyboard::{Key, NamedKey},
-    dpi::PhysicalSize,
 };
 
 mod compiler;
@@ -26,7 +25,7 @@ async fn main() {
     env_logger::init();
     
     // Start Compiler Daemon
-    let (compile_tx, compile_rx) = tokio::sync::mpsc::channel(10);
+    let (_compile_tx, compile_rx) = tokio::sync::mpsc::channel(10);
     let daemon = compiler_daemon::CompilerDaemon::new(compile_rx);
     tokio::spawn(daemon.run());
 
