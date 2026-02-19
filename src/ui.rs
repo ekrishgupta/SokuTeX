@@ -80,13 +80,58 @@ impl Gui {
     }
 
     fn draw_dashboard(&mut self, ctx: &egui::Context) {
+        egui::SidePanel::left("dashboard_sidebar")
+            .min_width(200.0)
+            .frame(egui::Frame::none().fill(Color32::from_rgb(13, 15, 17)))
+            .show(ctx, |ui| {
+                ui.add_space(24.0);
+                ui.horizontal(|ui| {
+                    ui.add_space(64.0);
+                    ui.label(RichText::new("SokuTeX")
+                        .font(FontId::new(16.0, egui::FontFamily::Name("logo_font".into())))
+                        .color(Color32::WHITE));
+                });
+
+                ui.add_space(32.0);
+                ui.vertical(|ui| {
+                    ui.spacing_mut().item_spacing.y = 8.0;
+                    
+                    self.nav_item(ui, "Recent", true);
+                    self.nav_item(ui, "Projects", false);
+                    self.nav_item(ui, "Templates", false);
+                    
+                    ui.add_space(ui.available_height() - 60.0);
+                    self.nav_item(ui, "Settings", false);
+                });
+            });
+
         egui::CentralPanel::default()
             .frame(egui::Frame::none().fill(Color32::from_rgb(10, 12, 14)))
             .show(ctx, |ui| {
-                ui.centered_and_justified(|ui| {
-                    ui.label(RichText::new("Dashboard (Work In Progress)").color(Color32::WHITE));
+                ui.add_space(24.0);
+                ui.horizontal(|ui| {
+                    ui.add_space(32.0);
+                    ui.label(RichText::new("Recent Work").font(FontId::new(22.0, egui::FontFamily::Proportional)).color(Color32::WHITE));
                 });
+                
+                ui.add_space(24.0);
+                // Placeholder for grid
             });
+    }
+
+    fn nav_item(&mut self, ui: &mut egui::Ui, label: &str, active: bool) -> egui::Response {
+        let color = if active { Color32::WHITE } else { Color32::from_rgb(120, 130, 140) };
+        let bg = if active { Color32::from_rgb(25, 27, 30) } else { Color32::TRANSPARENT };
+        
+        egui::Frame::none()
+            .fill(bg)
+            .rounding(4.0)
+            .inner_margin(egui::Margin::symmetric(32.0, 8.0))
+            .show(ui, |ui| {
+                ui.horizontal(|ui| {
+                    ui.label(RichText::new(label).color(color).font(FontId::new(13.0, egui::FontFamily::Proportional)));
+                })
+            }).response.interact(egui::Sense::click())
     }
 
     fn draw_editor(&mut self, ctx: &egui::Context, pdf_tex_id: Option<egui::TextureId>) {
