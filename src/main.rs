@@ -66,7 +66,7 @@ async fn main() {
     tokio::spawn(daemon.run());
 
     // Compile Debouncer
-    let (debounce_tx, mut debounce_rx) = tokio::sync::mpsc::channel::<(String, crate::config::CompileBackend, bool)>(10);
+    let (debounce_tx, mut debounce_rx) = tokio::sync::mpsc::channel::<(String, crate::config::CompileBackend, bool, Option<String>)>(10);
     let compile_tx_clone = compile_tx.clone();
     let result_tx_clone = result_tx.clone();
     tokio::spawn(async move {
@@ -86,13 +86,14 @@ async fn main() {
                     }
                 }
                 _ = &mut sleep, if last_req.is_some() => {
-                    if let Some((text, backend, draft)) = last_req.take() {
+                    if let Some((text, backend, draft, active_file)) = last_req.take() {
                         let (otx, orx) = tokio::sync::oneshot::channel();
                         use crate::compiler_daemon::CompileRequest;
                         if compile_tx_clone.send(CompileRequest::Compile { 
                             latex: text, 
                             backend, 
                             draft,
+                            active_file,
                             response: otx 
                         }).await.is_ok() {
                             if let Ok(res) = orx.await {
@@ -198,12 +199,25 @@ async fn main() {
                         if gui.compile_requested {
                             gui.compile_requested = false;
                             gui.last_compile_text = gui.ui_text.clone();
+                            
                             let text = gui.ui_text.clone();
                             let backend = gui.compile_backend;
                             let draft = gui.draft_mode;
+                            let active_file = Some(gui.active_file_path.clone());
+
+                            // Update VFS and scan for dependencies before compiling
+                            vfs.write_file("main.tex", text.as_bytes().to_vec());
+                            gui.dependency_tree = Some(crate::dependencies::DependencyScanner::scan("main.tex", &vfs));
+
+                            // Async Autosave
+                            let save_text = text.clone();
+                            tokio::spawn(async move {
+                                let _ = io::IoHandler::auto_save(save_text, "autosave.tex").await;
+                            });
+
                             let tx = debounce_tx.clone();
                             tokio::spawn(async move {
-                                let _ = tx.send((text, backend, draft)).await;
+                                let _ = tx.send((text, backend, draft, active_file)).await;
                             });
                         }
 
@@ -240,18 +254,10 @@ async fn main() {
                             editor.move_to_line(line);
                         }
 
-                        // Sync back to editor and autosave if changed
+                        // Sync back to editor if changed
                         let current_text = gui.ui_text.clone();
                         if editor.get_text() != current_text {
                             editor.buffer = ropey::Rope::from_str(&current_text);
-                            
-                            // Update VFS and scan for dependencies
-                            vfs.write_file("main.tex", current_text.as_bytes().to_vec());
-                            gui.dependency_tree = Some(crate::dependencies::DependencyScanner::scan("main.tex", &vfs));
-
-                            tokio::spawn(async move {
-                                let _ = io::IoHandler::auto_save(current_text, "autosave.tex").await;
-                            });
                         }
 
                         match render_res {
