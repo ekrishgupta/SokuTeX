@@ -35,7 +35,7 @@ fn render_pdf(
     page: i32,
     width: u16,
     height: u16,
-    tx: Option<tokio::sync::mpsc::Sender<(u32, u32, Vec<u8>)>>,
+    tx: Option<tokio::sync::mpsc::Sender<(u32, u32, std::sync::Arc<Vec<u8>>)>>,
 ) {
     tokio::task::spawn_blocking(move || {
         let timer = perf::PerfTimer::start("PDF Render (Async)");
@@ -125,7 +125,14 @@ async fn main() {
     
     // Initialize PDF Renderer with the workspace preview
     let pdf_renderer = std::sync::Arc::new(PdfRenderer::new().expect("Failed to initialize PdfRenderer"));
-    let mut current_pdf_data = std::sync::Arc::new(std::fs::read("workspace_preview.pdf").expect("Failed to read workspace_preview.pdf"));
+    
+    // Fallback if workspace_preview.pdf doesn't exist
+    let mut current_pdf_data = if let Ok(data) = std::fs::read("workspace_preview.pdf") {
+        std::sync::Arc::new(data)
+    } else {
+        // Create a dummy PDF if file missing to prevent crash
+        std::sync::Arc::new(vec![])
+    };
     let mut current_pdf_revision = 0u64;
 
     // PDF Render Channel
@@ -281,6 +288,23 @@ async fn main() {
                             tokio::spawn(async move {
                                 let _ = io::IoHandler::auto_save(current_text, "autosave.tex").await;
                             });
+                        }
+
+                        // Handle Backward Sync: Move editor cursor to requested line
+                        if let Some(target_line) = gui.sync_to_editor_request.take() {
+                            // Convert 1-based line to char offset
+                            if target_line > 0 {
+                                let line_idx = (target_line - 1) as usize;
+                                if line_idx < editor.buffer.len_lines() {
+                                    let char_offset = editor.buffer.line_to_char(line_idx);
+                                    
+                                    // We need to tell egui to move the cursor
+                                    // This is done by modifying the state of the TextEdit
+                                    // We can't directly access the TextEdit state here without the response ID
+                                    // So we'll use a hack: store it in GUI and let drawing pass it to TextEdit
+                                    gui.cursor_override = Some(char_offset);
+                                }
+                            }
                         }
 
                         match render_res {

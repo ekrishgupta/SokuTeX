@@ -75,6 +75,7 @@ pub struct Gui {
     pub pdf_highlight_rect: Option<egui::Rect>,
     pub active_file_path: String,
     pub file_change_request: Option<String>,
+    pub cursor_override: Option<usize>,
 }
 
 impl Gui {
@@ -146,6 +147,7 @@ impl Gui {
             pdf_highlight_rect: None,
             active_file_path: "main.tex".to_string(),
             file_change_request: None,
+            cursor_override: None,
         }
     }
 
@@ -979,8 +981,18 @@ impl Gui {
 
     fn render_node_recursive(&mut self, ui: &mut egui::Ui, node: &DependencyNode) {
         let has_children = !node.children.is_empty();
-        
         let is_active = self.active_file_path == node.name;
+        
+        let icon = if node.name.ends_with(".tex") {
+            "📄"
+        } else if node.name.ends_with(".bib") {
+            "📚"
+        } else if node.name.ends_with(".sty") || node.name.ends_with(".cls") {
+            "🛠"
+        } else {
+            "📝"
+        };
+
         let color = if is_active {
             Color32::from_rgb(100, 160, 255)
         } else if has_children {
@@ -989,8 +1001,8 @@ impl Gui {
             Color32::from_rgb(160, 170, 180)
         };
 
-        let label = RichText::new(format!("📄 {}", node.name))
-            .size(12.0)
+        let label = RichText::new(format!("{} {}", icon, node.name))
+            .size(11.5)
             .color(color);
 
         if has_children {
@@ -1001,6 +1013,7 @@ impl Gui {
                     }
                 })
                 .body(|ui| {
+                    ui.spacing_mut().item_spacing.y = 2.0;
                     for i in 0..node.children.len() {
                         let child = node.children[i].clone();
                         self.render_node_recursive(ui, &child);
