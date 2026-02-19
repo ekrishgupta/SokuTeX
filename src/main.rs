@@ -197,6 +197,11 @@ async fn main() {
                         }
 
                         let pdf_texture_id = state.pdf_texture_id;
+
+                        // Handle Backward Sync: Update internal editor state before drawing
+                        if let Some(line) = gui.sync_to_editor_request {
+                            editor.move_to_line(line);
+                        }
                         
                         let render_res = state.render(&window, |ctx| {
                             gui.draw(ctx, pdf_texture_id);
@@ -256,10 +261,6 @@ async fn main() {
                             }
                         }
 
-                        // Handle Inverse Sync from GUI
-                        if let Some(line) = gui.sync_to_editor_request.take() {
-                            editor.move_to_line(line);
-                        }
 
                         // Handle file change request from GUI
                         if let Some(new_file) = gui.file_change_request.take() {
@@ -290,22 +291,6 @@ async fn main() {
                             });
                         }
 
-                        // Handle Backward Sync: Move editor cursor to requested line
-                        if let Some(target_line) = gui.sync_to_editor_request.take() {
-                            // Convert 1-based line to char offset
-                            if target_line > 0 {
-                                let line_idx = (target_line - 1) as usize;
-                                if line_idx < editor.buffer.len_lines() {
-                                    let char_offset = editor.buffer.line_to_char(line_idx);
-                                    
-                                    // We need to tell egui to move the cursor
-                                    // This is done by modifying the state of the TextEdit
-                                    // We can't directly access the TextEdit state here without the response ID
-                                    // So we'll use a hack: store it in GUI and let drawing pass it to TextEdit
-                                    gui.cursor_override = Some(char_offset);
-                                }
-                            }
-                        }
 
                         match render_res {
                             Ok(_) => {}
