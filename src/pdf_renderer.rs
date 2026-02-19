@@ -4,17 +4,19 @@ use dashmap::DashMap;
 use std::sync::Arc;
 
 pub struct PdfRenderer {
-    cache: Arc<DashMap<(u64, u16, u16, i32), Vec<u8>>>,
+    cache: Arc<DashMap<(u64, u16, u16, i32), Arc<Vec<u8>>>>,
+    doc_cache: DashMap<u64, Arc<Document>>,
 }
 
 impl PdfRenderer {
     pub fn new() -> Result<Self, Box<dyn Error>> {
         Ok(Self {
             cache: Arc::new(DashMap::new()),
+            doc_cache: DashMap::new(),
         })
     }
 
-    pub fn render_page(&self, pdf_data: &[u8], revision: u64, page_index: i32, width: u16, height: u16) -> Result<Vec<u8>, Box<dyn Error>> {
+    pub fn render_page(&self, pdf_data: &[u8], revision: u64, page_index: i32, width: u16, height: u16) -> Result<Arc<Vec<u8>>, Box<dyn Error>> {
         // Create a unique key for this render
         let key = (revision, width, height, page_index);
         
@@ -22,7 +24,14 @@ impl PdfRenderer {
             return Ok(cached.value().clone());
         }
 
-        let document = Document::from_bytes(pdf_data, "")?;
+        let document = if let Some(doc) = self.doc_cache.get(&revision) {
+            doc.value().clone()
+        } else {
+            let doc = Arc::new(Document::from_bytes(pdf_data, "")?);
+            self.doc_cache.insert(revision, doc.clone());
+            doc
+        };
+
         let page = document.load_page(page_index)?;
         
         let bounds = page.bounds()?;
@@ -44,7 +53,8 @@ impl PdfRenderer {
             dst[3] = 255;
         }
         
-        self.cache.insert(key, bgra_samples.clone());
-        Ok(bgra_samples)
+        let arc_samples = Arc::new(bgra_samples);
+        self.cache.insert(key, arc_samples.clone());
+        Ok(arc_samples)
     }
 }
