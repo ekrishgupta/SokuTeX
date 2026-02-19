@@ -2,14 +2,21 @@ use winit::window::Window;
 
 pub struct State<'a> {
     surface: wgpu::Surface<'a>,
-    device: wgpu::Device,
-    queue: wgpu::Queue,
+    pub device: wgpu::Device,
+    pub queue: wgpu::Queue,
     config: wgpu::SurfaceConfiguration,
     pub size: winit::dpi::PhysicalSize<u32>,
     render_pipeline: wgpu::RenderPipeline,
     bind_group: wgpu::BindGroup,
     texture_bind_group_layout: wgpu::BindGroupLayout, 
     app_config: crate::config::Config,
+    
+    // Egui
+    pub egui_ctx: egui::Context,
+    pub egui_winit: egui_winit::State,
+    pub egui_renderer: egui_wgpu::Renderer,
+    pub pdf_texture_id: Option<egui::TextureId>,
+    pdf_view: Option<wgpu::TextureView>,
 }
 
 impl<'a> State<'a> {
@@ -198,6 +205,18 @@ impl<'a> State<'a> {
             label: Some("diffuse_bind_group"),
         });
 
+        // Egui setup
+        let egui_ctx = egui::Context::default();
+        let egui_winit = egui_winit::State::new(
+            egui_ctx.clone(),
+            egui::viewport::ViewportId::ROOT,
+            &window,
+            Some(window.scale_factor() as f32),
+            None,
+        );
+
+        let egui_renderer = egui_wgpu::Renderer::new(&device, config.format, None, 1);
+
         Self {
             surface,
             device,
@@ -208,6 +227,11 @@ impl<'a> State<'a> {
             bind_group,
             texture_bind_group_layout,
             app_config: crate::config::Config::default(),
+            egui_ctx,
+            egui_winit,
+            egui_renderer,
+            pdf_texture_id: None,
+            pdf_view: None,
         }
     }
 
@@ -220,10 +244,8 @@ impl<'a> State<'a> {
         }
     }
     
-    // Stub for input handling
-    #[allow(dead_code)]
-    pub fn input(&mut self, _event: &winit::event::WindowEvent) -> bool {
-        false
+    pub fn handle_event(&mut self, window: &Window, event: &winit::event::WindowEvent) -> egui_winit::EventResponse {
+        self.egui_winit.on_window_event(window, event)
     }
     
     // Helper to update texture from RGBA bytes
@@ -271,12 +293,21 @@ impl<'a> State<'a> {
             ..Default::default()
         });
         
+        // Register with egui
+        if let Some(tid) = self.pdf_texture_id {
+            self.egui_renderer.free_texture(&tid);
+        }
+        self.pdf_texture_id = Some(self.egui_renderer.register_native_texture(&self.device, &view, wgpu::FilterMode::Linear));
+        self.pdf_view = Some(view);
+
+        // Update raw wgpu bind group too (for fallback/direct rendering if needed)
+        let view_ref = self.pdf_view.as_ref().unwrap();
         self.bind_group = self.device.create_bind_group(&wgpu::BindGroupDescriptor {
             layout: &self.texture_bind_group_layout,
             entries: &[
                 wgpu::BindGroupEntry {
                     binding: 0,
-                    resource: wgpu::BindingResource::TextureView(&view),
+                    resource: wgpu::BindingResource::TextureView(view_ref),
                 },
                 wgpu::BindGroupEntry {
                     binding: 1,
@@ -287,17 +318,30 @@ impl<'a> State<'a> {
         });
     }
 
-    pub fn render(&mut self) -> Result<(), wgpu::SurfaceError> {
-        let output = self.surface.get_current_texture()?;
-        let view = output
-            .texture
-            .create_view(&wgpu::TextureViewDescriptor::default());
+    pub fn render(&mut self, window: &Window, run_ui: impl FnOnce(&egui::Context)) -> Result<(), wgpu::SurfaceError> {
+        let raw_input = self.egui_winit.take_egui_input(window);
+        let full_output = self.egui_ctx.run(raw_input, run_ui);
+        
+        self.egui_winit.handle_platform_output(window, full_output.platform_output);
+        
+        let paint_jobs = self.egui_ctx.tessellate(full_output.shapes, full_output.pixels_per_point);
+        let screen_descriptor = egui_wgpu::ScreenDescriptor {
+            size_in_pixels: [self.config.width, self.config.height],
+            pixels_per_point: full_output.pixels_per_point,
+        };
 
-        let mut encoder = self
-            .device
-            .create_command_encoder(&wgpu::CommandEncoderDescriptor {
-                label: Some("Render Encoder"),
-            });
+        for (id, delta) in &full_output.textures_delta.set {
+            self.egui_renderer.update_texture(&self.device, &self.queue, *id, delta);
+        }
+
+        let mut encoder = self.device.create_command_encoder(&wgpu::CommandEncoderDescriptor {
+            label: Some("Render Encoder"),
+        });
+
+        self.egui_renderer.update_buffers(&self.device, &self.queue, &mut encoder, &paint_jobs, &screen_descriptor);
+
+        let output = self.surface.get_current_texture()?;
+        let view = output.texture.create_view(&wgpu::TextureViewDescriptor::default());
 
         {
             let mut render_pass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
@@ -320,9 +364,16 @@ impl<'a> State<'a> {
                 timestamp_writes: None,
             });
             
-            render_pass.set_pipeline(&self.render_pipeline);
-            render_pass.set_bind_group(0, &self.bind_group, &[]);
-            render_pass.draw(0..3, 0..1); // Draw full screen triangle
+            // Optionally Draw raw background here
+            // render_pass.set_pipeline(&self.render_pipeline);
+            // render_pass.set_bind_group(0, &self.bind_group, &[]);
+            // render_pass.draw(0..3, 0..1);
+
+            self.egui_renderer.render(&mut render_pass, &paint_jobs, &screen_descriptor);
+        }
+
+        for id in &full_output.textures_delta.free {
+            self.egui_renderer.free_texture(id);
         }
 
         self.queue.submit(std::iter::once(encoder.finish()));

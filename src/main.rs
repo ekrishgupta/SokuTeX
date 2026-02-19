@@ -56,12 +56,11 @@ async fn main() {
     let mut vfs = vfs::Vfs::new();
     vfs.write_file("main.tex", b"\\documentclass{article}\n\\begin{document}\nHello SokuTeX!\n\\end{document}".to_vec());
 
+    let mut ui_text = String::new();
     let mut editor = editor::Editor::new();
     if let Some(content) = vfs.read_file("main.tex") {
-        let text = String::from_utf8_lossy(content);
-        for c in text.chars() {
-            editor.insert_char(c);
-        }
+        ui_text = String::from_utf8_lossy(content).to_string();
+        editor.buffer = ropey::Rope::from_str(&ui_text);
     }
 
     let mut modifiers = winit::event::Modifiers::default();
@@ -83,37 +82,18 @@ async fn main() {
                             ..
                         },
                         ..
-                    } => match logical_key {
-                        Key::Named(NamedKey::Escape) => target.exit(),
-                        Key::Character(c) if c == "p" && (modifiers.state().super_key() || modifiers.state().control_key()) => {
-                            palette.toggle();
-                            println!("Palette visible: {}", palette.visible);
-                        }
-                        Key::Character(c) => {
-                            // Basic text input for now
-                            if c.chars().count() == 1 {
-                                editor.insert_char(c.chars().next().unwrap());
-                                let text = editor.get_text();
-                                tokio::spawn(async move {
-                                    let _ = io::IoHandler::auto_save(text, "autosave.tex").await;
-                                });
+                    } => {
+                        let consumed = state.handle_event(&window, &event).consumed;
+                        if !consumed {
+                            match logical_key {
+                                Key::Named(NamedKey::Escape) => target.exit(),
+                                Key::Character(c) if c == "p" && (modifiers.state().super_key() || modifiers.state().control_key()) => {
+                                    palette.toggle();
+                                }
+                                _ => {}
                             }
                         }
-                        Key::Named(NamedKey::Backspace) => {
-                            editor.delete_back();
-                            let text = editor.get_text();
-                            tokio::spawn(async move {
-                                let _ = io::IoHandler::auto_save(text, "autosave.tex").await;
-                            });
-                        }
-                        Key::Named(NamedKey::ArrowLeft) => {
-                            editor.move_left();
-                        }
-                        Key::Named(NamedKey::ArrowRight) => {
-                            editor.move_right();
-                        }
-                        _ => {}
-                    },
+                    }
                     WindowEvent::Resized(physical_size) => {
                         state.resize(*physical_size);
                         render_pdf(&mut state, &pdf_renderer, &pdf_data);
@@ -122,25 +102,90 @@ async fn main() {
                     WindowEvent::ModifiersChanged(new_modifiers) => {
                         modifiers = *new_modifiers;
                     }
-                    WindowEvent::MouseInput {
-                        state: ElementState::Pressed,
-                        button: MouseButton::Left,
-                        ..
-                    } => {
-                        // In a real app we'd get the actual cursor position
-                        let offset = synctex::SyncTex::pdf_to_editor(0.0, 0.0, 0);
-                        editor.cursor = offset;
-                        println!("SyncTeX jump to offset: {}", offset);
-                    }
                     WindowEvent::RedrawRequested => {
-                        match state.render() {
+                        let pdf_texture_id = state.pdf_texture_id;
+                        
+                        let render_res = state.render(&window, |ctx| {
+                            let mut visuals = egui::Visuals::dark();
+                            visuals.window_fill = egui::Color32::from_rgb(15, 15, 15);
+                            visuals.panel_fill = egui::Color32::from_rgb(15, 15, 15);
+                            ctx.set_visuals(visuals);
+
+                            egui::TopBottomPanel::top("header").show(ctx, |ui| {
+                                ui.add_space(4.0);
+                                ui.horizontal(|ui| {
+                                    ui.add_space(8.0);
+                                    ui.label(egui::RichText::new("SokuTeX").strong().size(14.0));
+                                    ui.separator();
+                                    
+                                    if ui.button("Compile").clicked() {
+                                        println!("Manual compile triggered");
+                                    }
+                                    
+                                    ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
+                                        ui.add_space(8.0);
+                                        if ui.button("Expand").clicked() {}
+                                        if ui.button("Close").clicked() {
+                                            target.exit();
+                                        }
+                                    });
+                                });
+                                ui.add_space(4.0);
+                            });
+
+                            egui::SidePanel::left("editor_panel")
+                                .min_width(300.0)
+                                .frame(egui::Frame::none().fill(egui::Color32::from_rgb(10, 10, 10)))
+                                .show(ctx, |ui| {
+                                    ui.add_space(8.0);
+                                    ui.horizontal(|ui| {
+                                        ui.add_space(8.0);
+                                        ui.heading("Editor");
+                                    });
+                                    
+                                    egui::ScrollArea::vertical().show(ui, |ui| {
+                                        let resp = ui.add_sized(ui.available_size(), egui::TextEdit::multiline(&mut ui_text)
+                                            .font(egui::TextStyle::Monospace)
+                                            .frame(false)
+                                            .code_editor()
+                                            .lock_focus(true));
+                                        
+                                        if resp.changed() {
+                                            editor.buffer = ropey::Rope::from_str(&ui_text);
+                                            // Trigger auto-save
+                                            let text = ui_text.clone();
+                                            tokio::spawn(async move {
+                                                let _ = io::IoHandler::auto_save(text, "autosave.tex").await;
+                                            });
+                                        }
+                                    });
+                                });
+
+                            egui::CentralPanel::default()
+                                .frame(egui::Frame::none().fill(egui::Color32::from_rgb(20, 20, 20)))
+                                .show(ctx, |ui| {
+                                if let Some(tex_id) = pdf_texture_id {
+                                    ui.centered_and_justified(|ui| {
+                                        ui.image(egui::load::SizedTexture::new(tex_id, ui.available_size()));
+                                    });
+                                } else {
+                                    ui.centered_and_justified(|ui| {
+                                        ui.label(egui::RichText::new("Waiting for PDF...").italics());
+                                    });
+                                }
+                            });
+                        });
+
+                        match render_res {
                             Ok(_) => {}
                             Err(wgpu::SurfaceError::Lost) => state.resize(state.size),
                             Err(wgpu::SurfaceError::OutOfMemory) => target.exit(),
                             Err(e) => eprintln!("{:?}", e),
                         }
                     }
-                    _ => {}
+                    _ => {
+                        let _ = state.handle_event(&window, &event);
+                    }
                 }
             },
             Event::AboutToWait => {
