@@ -60,7 +60,7 @@ async fn main() {
 
     render_pdf(&mut state, &pdf_renderer, &pdf_data);
     let mut palette = palette::CommandPalette::new();
-    let mut vfs = vfs::Vfs::new();
+    let vfs = vfs::Vfs::new();
     vfs.write_file("main.tex", b"\\documentclass{article}\n\\begin{document}\nHello SokuTeX!\n\\end{document}".to_vec());
 
     let mut gui = ui::Gui::new();
