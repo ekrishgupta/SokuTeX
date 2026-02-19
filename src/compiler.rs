@@ -3,11 +3,7 @@ use std::collections::HashMap;
 use regex::Regex;
 use crate::vfs::Vfs;
 
-#[derive(Debug, Clone, Copy, PartialEq)]
-pub enum CompileBackend {
-    Internal,
-    Tectonic,
-}
+use crate::config::CompileBackend;
 
 pub struct Compiler {
     cache: HashMap<String, Vec<u8>>,
@@ -28,8 +24,8 @@ impl Compiler {
         self.backend = backend;
     }
 
-    pub fn compile(&mut self, latex: &str, vfs: &Vfs) -> Result<Vec<u8>, Box<dyn Error>> {
-        let (optimized_latex, _) = self.optimize_latex(latex, vfs);
+    pub fn compile(&mut self, latex: &str, draft: bool, vfs: &Vfs) -> Result<Vec<u8>, Box<dyn Error>> {
+        let (optimized_latex, _) = self.optimize_latex(latex, draft, vfs);
 
         // 3. Cache Check
         let final_hash = format!("{:x}_{:?}", md5::compute(&optimized_latex), self.backend);
@@ -48,7 +44,7 @@ impl Compiler {
     }
 
     /// Extracted optimization logic for use in external compilation flows (like Latexmk)
-    pub fn optimize_latex(&mut self, latex: &str, vfs: &Vfs) -> (String, bool) {
+    pub fn optimize_latex(&mut self, latex: &str, draft: bool, vfs: &Vfs) -> (String, bool) {
         let current_includes = self.find_includes(latex);
         let mut changed_subfiles = Vec::new();
 
@@ -79,6 +75,18 @@ impl Compiler {
                 optimized_latex.insert_str(pos, &include_only);
                 is_incremental = true;
             }
+        }
+
+
+        if draft {
+            if optimized_latex.contains("\\documentclass") && !optimized_latex.contains("[draft]") {
+                optimized_latex = optimized_latex.replace("\\documentclass", "\\documentclass[draft]");
+            }
+            if let Some(pos) = optimized_latex.find("\\begin{document}") {
+                optimized_latex.insert_str(pos + "\\begin{document}".len(), "\n\\textbf{--- DRAFT MODE ACTIVE ---}\n");
+            }
+        } else {
+            optimized_latex = optimized_latex.replace("\\documentclass[draft]", "\\documentclass");
         }
 
         (optimized_latex, is_incremental)
@@ -119,9 +127,10 @@ impl Compiler {
         Ok(pdf.into_bytes())
     }
 
-    fn compile_tectonic(&self, _latex: &str) -> Result<Vec<u8>, Box<dyn Error>> {
-        // Tectonic integration would use tectonic::latex_to_pdf
-        // For now, we simulate success to maintain tool flow
-        self.compile_internal("--- Tectonic Output Simulation ---")
+    fn compile_tectonic(&self, latex: &str) -> Result<Vec<u8>, Box<dyn Error>> {
+        // Tectonic's latex_to_pdf uses MemoryIo internally to avoid disk I/O for the main document
+        // and returns the resulting PDF as a byte vector.
+        tectonic::latex_to_pdf(latex)
+            .map_err(|e| format!("Tectonic compilation failed: {}", e).into())
     }
 }
