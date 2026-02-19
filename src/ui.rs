@@ -54,6 +54,10 @@ pub struct Gui {
     pub show_errors: bool,
     pub show_command_palette: bool,
     pub command_search_text: String,
+    pub last_compile_text: String,
+    pub prev_ui_text: String,
+    pub compile_timer: std::time::Instant,
+    pub compile_requested: bool,
 }
 
 impl Gui {
@@ -87,6 +91,10 @@ impl Gui {
             show_errors: false,
             show_command_palette: false,
             command_search_text: String::new(),
+            last_compile_text: String::new(),
+            prev_ui_text: String::new(),
+            compile_timer: std::time::Instant::now(),
+            compile_requested: false,
         }
     }
 
@@ -143,6 +151,17 @@ impl Gui {
         if ctx.input(|i| i.modifiers.command && i.key_pressed(egui::Key::K)) {
             self.show_command_palette = !self.show_command_palette;
         }
+
+        // Auto-Compile Detection (Near-instant latency)
+        if self.ui_text != self.prev_ui_text {
+            self.compile_timer = std::time::Instant::now();
+        }
+        
+        if self.ui_text != self.last_compile_text && self.compile_timer.elapsed().as_millis() > 300 {
+            self.compile_requested = true;
+        }
+        
+        self.prev_ui_text = self.ui_text.clone();
 
         match self.view {
             View::Dashboard => self.draw_dashboard(ctx),
