@@ -28,6 +28,26 @@ mod dependencies;
 
 use pdf_renderer::PdfRenderer;
 
+fn render_pdf(
+    pdf_renderer: std::sync::Arc<PdfRenderer>,
+    pdf_data: std::sync::Arc<Vec<u8>>,
+    revision: u64,
+    page: i32,
+    width: u16,
+    height: u16,
+    tx: Option<tokio::sync::mpsc::Sender<(u32, u32, Vec<u8>)>>,
+) {
+    tokio::task::spawn_blocking(move || {
+        let timer = perf::PerfTimer::start("PDF Render (Async)");
+        if let Ok(pixels) = pdf_renderer.render_page(&pdf_data, revision, page, width, height) {
+            if let Some(tx) = tx {
+                let _ = tx.blocking_send((width as u32, height as u32, pixels));
+            }
+        }
+        timer.stop();
+    });
+}
+
 #[tokio::main]
 async fn main() {
     env_logger::init();
