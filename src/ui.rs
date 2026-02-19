@@ -841,7 +841,7 @@ impl Gui {
                                     char_idx += l.len() + 1;
                                 }
                                 let ccursor = egui::text::CCursor::new(char_idx);
-                                state.set_ccursor_range(Some(egui::text::CCursorRange::one(ccursor)));
+                                state.cursor.set_char_range(Some(egui::text::CCursorRange::one(ccursor)));
                                 state.store(ui.ctx(), resp.id);
                                 ui.ctx().memory_mut(|m| m.request_focus(resp.id));
                             }
@@ -849,7 +849,7 @@ impl Gui {
 
                         if let Some(state) = egui::TextEdit::load_state(ui.ctx(), resp.id) {
                             // Simple prefix matching based on cursor
-                            let char_idx = state.ccursor_range().map(|r| r.primary.index).unwrap_or(0);
+                            let char_idx = state.cursor.char_range().map(|r| r.primary.index).unwrap_or(0);
                             let text_up_to_cursor: String = self.ui_text.chars().take(char_idx).collect();
                             if let Some(last_backslash) = text_up_to_cursor.rfind('\\') {
                                 let prefix = &text_up_to_cursor[last_backslash..];
@@ -896,7 +896,7 @@ impl Gui {
                                     }
                                     
                                     if let Some(node) = stx.forward_sync(line_num, 1) {
-                                        self.pdf_scroll_target = Some((node.page, node.x, node.y));
+                                        self.pdf_scroll_target = Some((node.page as usize, node.x, node.y));
                                         
                                         // Calculate highlight rect (Letter size: 612 x 792)
                                         let x_ratio = node.x / 612.0;
