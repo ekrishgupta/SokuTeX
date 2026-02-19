@@ -14,7 +14,7 @@ impl FileWatcher {
     pub fn new(tx: mpsc::Sender<FileEvent>) -> notify::Result<Self> {
         let (sync_tx, sync_rx) = std::sync::mpsc::channel();
 
-        let mut watcher = notify::RecommendedWatcher::new(sync_tx, Config::default())?;
+        let watcher = notify::RecommendedWatcher::new(sync_tx, Config::default())?;
         
         // Spawn a bridge thread from sync mpsc to tokio mpsc
         std::thread::spawn(move || {

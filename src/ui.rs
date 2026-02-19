@@ -703,7 +703,7 @@ impl Gui {
                 egui::ScrollArea::vertical()
                     .id_source("editor_scroll")
                     .show(ui, |ui| {
-                        let _resp = ui.add_sized(
+                        let resp = ui.add_sized(
                             ui.available_size(),
                             egui::TextEdit::multiline(&mut self.ui_text)
                                 .font(FontId::monospace(13.0))
@@ -718,37 +718,34 @@ impl Gui {
                                     ui.fonts(|f| f.layout_job(layout_job))
                                 })
                         );
-                        if let Some(state) = egui::TextEdit::load_state(ui.ctx(), _resp.id) {
-                            if let Some(cursor_range) = state.cursor_range() {
-                                let char_idx = cursor_range.primary.ccursor.index;
-                                // Fast prefix scanning
-                                let text_up_to_cursor: String = self.ui_text.chars().take(char_idx).collect();
-                                if let Some(last_backslash) = text_up_to_cursor.rfind('\\') {
-                                    let prefix = &text_up_to_cursor[last_backslash..];
-                                    if !prefix.contains(' ') && prefix.len() > 1 {
-                                        let suggestions = self.autocomplete.suggest(prefix);
-                                        if !suggestions.is_empty() {
-                                            egui::Area::new(egui::Id::new("autocomplete_area"))
-                                                .fixed_pos(_resp.rect.left_top() + egui::vec2(64.0, 64.0)) // Static for now, can refine with cursor rect
-                                                .show(ui.ctx(), |ui| {
-                                                    egui::Frame::popup(ui.style())
-                                                        .fill(Color32::from_rgb(25, 28, 32))
-                                                        .stroke(egui::Stroke::new(1.0, Color32::from_rgb(45, 50, 60)))
-                                                        .show(ui, |ui| {
-                                                            ui.set_width(150.0);
-                                                            for suggestion in suggestions {
-                                                                if ui.selectable_label(false, &suggestion).clicked() {
-                                                                    // Splice suggestion into text
-                                                                    let mut new_text: String = self.ui_text.chars().take(last_backslash).collect();
-                                                                    new_text.push_str(&suggestion);
-                                                                    let suffix: String = self.ui_text.chars().skip(char_idx).collect();
-                                                                    new_text.push_str(&suffix);
-                                                                    self.ui_text = new_text;
-                                                                }
+                        if let Some(state) = egui::TextEdit::load_state(ui.ctx(), resp.id) {
+                            // Simple prefix matching based on cursor
+                            let char_idx = state.ccursor().map(|c| c.index).unwrap_or(0);
+                            let text_up_to_cursor: String = self.ui_text.chars().take(char_idx).collect();
+                            if let Some(last_backslash) = text_up_to_cursor.rfind('\\') {
+                                let prefix = &text_up_to_cursor[last_backslash..];
+                                if !prefix.contains(' ') && prefix.len() > 1 {
+                                    let suggestions = self.autocomplete.suggest(prefix);
+                                    if !suggestions.is_empty() {
+                                        egui::Area::new(egui::Id::new("autocomplete_area"))
+                                            .fixed_pos(resp.rect.left_top() + egui::vec2(64.0, 64.0)) 
+                                            .show(ui.ctx(), |ui| {
+                                                egui::Frame::popup(ui.style())
+                                                    .fill(Color32::from_rgb(25, 28, 32))
+                                                    .stroke(egui::Stroke::new(1.0, Color32::from_rgb(45, 50, 60)))
+                                                    .show(ui, |ui| {
+                                                        ui.set_width(150.0);
+                                                        for suggestion in suggestions {
+                                                            if ui.selectable_label(false, &suggestion).clicked() {
+                                                                let mut new_text: String = self.ui_text.chars().take(last_backslash).collect();
+                                                                new_text.push_str(&suggestion);
+                                                                let suffix: String = self.ui_text.chars().skip(char_idx).collect();
+                                                                new_text.push_str(&suffix);
+                                                                self.ui_text = new_text;
                                                             }
-                                                        });
-                                                });
-                                        }
+                                                        }
+                                                    });
+                                            });
                                     }
                                 }
                             }
