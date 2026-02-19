@@ -48,6 +48,25 @@ fn render_pdf(
     });
 }
 
+fn render_pdf_tile(
+    pdf_renderer: std::sync::Arc<PdfRenderer>,
+    pdf_data: std::sync::Arc<Vec<u8>>,
+    revision: u64,
+    page: i32,
+    width: u16,
+    height: u16,
+    tile_x: u16,
+    tile_y: u16,
+    tile_size: u16,
+    tx: tokio::sync::mpsc::Sender<(u16, u16, u16, std::sync::Arc<Vec<u8>>)>,
+) {
+    tokio::task::spawn_blocking(move || {
+        if let Ok(pixels) = pdf_renderer.render_tile(&pdf_data, revision, page, width, height, tile_x, tile_y, tile_size) {
+            let _ = tx.blocking_send((tile_x, tile_y, tile_size, pixels));
+        }
+    });
+}
+
 #[tokio::main]
 async fn main() {
     env_logger::init();
@@ -66,7 +85,7 @@ async fn main() {
     tokio::spawn(daemon.run());
 
     // Compile Debouncer
-    let (debounce_tx, mut debounce_rx) = tokio::sync::mpsc::channel::<(String, crate::config::CompileBackend, bool, Option<String>)>(10);
+    let (debounce_tx, mut debounce_rx) = tokio::sync::mpsc::channel::<(String, crate::config::CompileBackend, bool, bool, Option<String>)>(10);
     let compile_tx_clone = compile_tx.clone();
     let result_tx_clone = result_tx.clone();
     tokio::spawn(async move {
@@ -86,13 +105,14 @@ async fn main() {
                     }
                 }
                 _ = &mut sleep, if last_req.is_some() => {
-                    if let Some((text, backend, draft, active_file)) = last_req.take() {
+                    if let Some((text, backend, draft, focus_mode, active_file)) = last_req.take() {
                         let (otx, orx) = tokio::sync::oneshot::channel();
                         use crate::compiler_daemon::CompileRequest;
                         if compile_tx_clone.send(CompileRequest::Compile { 
                             latex: text, 
                             backend, 
                             draft,
+                            focus_mode,
                             active_file,
                             response: otx 
                         }).await.is_ok() {
@@ -137,6 +157,7 @@ async fn main() {
 
     // PDF Render Channel
     let (pdf_tx, mut pdf_rx) = tokio::sync::mpsc::channel::<(u32, u32, std::sync::Arc<Vec<u8>>)>(2);
+    let (tile_tx, mut tile_rx) = tokio::sync::mpsc::channel::<(u16, u16, u16, std::sync::Arc<Vec<u8>>)>(16);
 
     render_pdf(pdf_renderer.clone(), current_pdf_data.clone(), current_pdf_revision, 0, state.size.width as u16, state.size.height as u16, Some(pdf_tx.clone()));
     let mut palette = palette::CommandPalette::new();
@@ -196,6 +217,11 @@ async fn main() {
                             state.update_texture(w, h, &pixels);
                         }
 
+                        // Check for Tile render results
+                        if let Ok((x, y, size, pixels)) = tile_rx.try_recv() {
+                            state.update_texture_region(x as u32, y as u32, size as u32, size as u32, &pixels);
+                        }
+
                         let pdf_texture_id = state.pdf_texture_id;
 
                         // Handle Backward Sync: Update internal editor state before drawing
@@ -203,6 +229,19 @@ async fn main() {
                             editor.move_to_line(line);
                         }
                         
+                        // Update GPU Uniforms for PDF Transform
+                        let zoom = gui.pdf_zoom;
+                        let pan = gui.pdf_pan;
+                        
+                        // Simple 2D transform matrix: [zoom, 0, 0, pan.x], [0, zoom, 0, pan.y], ...
+                        let transform = [
+                            [zoom, 0.0, 0.0, 0.0],
+                            [0.0, zoom, 0.0, 0.0],
+                            [0.0, 0.0, 1.0, 0.0],
+                            [pan.x, pan.y, 0.0, 1.0],
+                        ];
+                        state.update_uniforms(transform);
+
                         let render_res = state.render(&window, |ctx| {
                             gui.draw(ctx, pdf_texture_id);
                         });
@@ -215,6 +254,7 @@ async fn main() {
                             let text = gui.ui_text.clone();
                             let backend = gui.compile_backend;
                             let draft = gui.draft_mode;
+                            let focus_mode = gui.focus_mode;
                             let active_file = Some(gui.active_file_path.clone());
 
                             // Update VFS and scan for dependencies before compiling
@@ -229,7 +269,7 @@ async fn main() {
 
                             let tx = debounce_tx.clone();
                             tokio::spawn(async move {
-                                let _ = tx.send((text, backend, draft, active_file)).await;
+                                let _ = tx.send((text, backend, draft, focus_mode, active_file)).await;
                             });
                         }
 

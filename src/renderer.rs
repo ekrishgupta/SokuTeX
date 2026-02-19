@@ -312,86 +312,30 @@ impl<'a> State<'a> {
     }
     
     // Helper to update texture from RGBA bytes
-    pub fn update_texture(&mut self, width: u32, height: u32, data: &[u8]) {
-        let size = wgpu::Extent3d {
-            width,
-            height,
-            depth_or_array_layers: 1,
-        };
+    pub fn update_texture_region(&mut self, x: u32, y: u32, width: u32, height: u32, data: &[u8]) {
+        if let Some(ref texture) = self.pdf_texture {
+            let size = wgpu::Extent3d {
+                width,
+                height,
+                depth_or_array_layers: 1,
+            };
 
-        let texture_matches = if let Some(ref tex) = self.pdf_texture {
-            tex.width() == width && tex.height() == height
-        } else {
-            false
-        };
-
-        if !texture_matches {
-            let texture = self.device.create_texture(&wgpu::TextureDescriptor {
-                label: Some("pdf_texture"),
+            self.queue.write_texture(
+                wgpu::ImageCopyTexture {
+                    texture: texture,
+                    mip_level: 0,
+                    origin: wgpu::Origin3d { x, y, z: 0 },
+                    aspect: wgpu::TextureAspect::All,
+                },
+                data,
+                wgpu::ImageDataLayout {
+                    offset: 0,
+                    bytes_per_row: Some(4 * width),
+                    rows_per_image: Some(height),
+                },
                 size,
-                mip_level_count: 1,
-                sample_count: 1,
-                dimension: wgpu::TextureDimension::D2,
-                format: wgpu::TextureFormat::Bgra8Unorm,
-                usage: wgpu::TextureUsages::TEXTURE_BINDING | wgpu::TextureUsages::COPY_DST,
-                view_formats: &[],
-            });
-            
-            let view = texture.create_view(&wgpu::TextureViewDescriptor::default());
-            
-            // Register with egui
-            if let Some(tid) = self.pdf_texture_id {
-                self.egui_renderer.free_texture(&tid);
-            }
-            self.pdf_texture_id = Some(self.egui_renderer.register_native_texture(&self.device, &view, wgpu::FilterMode::Linear));
-            self.pdf_view = Some(view);
-            self.pdf_texture = Some(texture);
+            );
         }
-        
-        let texture = self.pdf_texture.as_ref().unwrap();
-
-        self.queue.write_texture(
-             wgpu::ImageCopyTexture {
-                texture: texture,
-                mip_level: 0,
-                origin: wgpu::Origin3d::ZERO,
-                aspect: wgpu::TextureAspect::All,
-            },
-            data,
-            wgpu::ImageDataLayout {
-                offset: 0,
-                bytes_per_row: Some(4 * width),
-                rows_per_image: Some(height),
-            },
-            size,
-        );
-        
-        let sampler = self.device.create_sampler(&wgpu::SamplerDescriptor {
-            address_mode_u: wgpu::AddressMode::ClampToEdge,
-            address_mode_v: wgpu::AddressMode::ClampToEdge,
-            address_mode_w: wgpu::AddressMode::ClampToEdge,
-            mag_filter: wgpu::FilterMode::Linear,
-            min_filter: wgpu::FilterMode::Linear,
-            mipmap_filter: wgpu::FilterMode::Linear, 
-            ..Default::default()
-        });
-        
-        // Update raw wgpu bind group too
-        let view_ref = self.pdf_view.as_ref().unwrap();
-        self.bind_group = self.device.create_bind_group(&wgpu::BindGroupDescriptor {
-            layout: &self.texture_bind_group_layout,
-            entries: &[
-                wgpu::BindGroupEntry {
-                    binding: 0,
-                    resource: wgpu::BindingResource::TextureView(view_ref),
-                },
-                wgpu::BindGroupEntry {
-                    binding: 1,
-                    resource: wgpu::BindingResource::Sampler(&sampler),
-                },
-            ],
-            label: Some("pdf_bind_group"),
-        });
     }
 
     pub fn update_uniforms(&mut self, transform: [[f32; 4]; 4]) {

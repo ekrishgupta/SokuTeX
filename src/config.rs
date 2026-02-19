@@ -9,6 +9,7 @@ pub struct Config {
     pub background_color: [f32; 4],
     pub font_size: f32,
     pub backend: CompileBackend,
+    pub focus_mode: bool,
 }
 
 impl Default for Config {
@@ -17,6 +18,7 @@ impl Default for Config {
             background_color: [0.05, 0.05, 0.05, 1.0], // Minimalist dark
             font_size: 14.0,
             backend: CompileBackend::Internal,
+            focus_mode: false,
         }
     }
 }

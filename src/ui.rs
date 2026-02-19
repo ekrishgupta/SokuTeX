@@ -62,6 +62,7 @@ pub struct Gui {
     pub compile_requested: bool,
     pub autocomplete: crate::autocomplete::AutocompleteEngine,
     pub draft_mode: bool,
+    pub focus_mode: bool,
     pub compile_backend: crate::config::CompileBackend,
     pub dependency_tree: Option<DependencyNode>,
     pub show_dependencies: bool,
@@ -76,6 +77,10 @@ pub struct Gui {
     pub active_file_path: String,
     pub file_change_request: Option<String>,
     pub cursor_override: Option<usize>,
+    
+    // PDF Interactive State
+    pub pdf_zoom: f32,
+    pub pdf_pan: egui::Vec2,
 }
 
 impl Gui {
@@ -115,6 +120,7 @@ impl Gui {
             compile_requested: false,
             autocomplete: crate::autocomplete::AutocompleteEngine::new(),
             draft_mode: false,
+            focus_mode: false,
             compile_backend: crate::config::CompileBackend::Internal,
             dependency_tree: None,
             show_dependencies: true,
@@ -148,6 +154,8 @@ impl Gui {
             active_file_path: "main.tex".to_string(),
             file_change_request: None,
             cursor_override: None,
+            pdf_zoom: 1.0,
+            pdf_pan: egui::vec2(0.0, 0.0),
         }
     }
 
@@ -722,6 +730,12 @@ impl Gui {
                                 self.compile_requested = true; // Trigger re-compile on toggle
                             }
 
+                            let focus_text = if self.focus_mode { "FOCUS: ON" } else { "FOCUS: OFF" };
+                            if ui.button(RichText::new(focus_text).size(9.0).strong()).clicked() {
+                                self.focus_mode = !self.focus_mode;
+                                self.compile_requested = true; // Trigger re-compile on toggle
+                            }
+
                             if ui.button(RichText::new("SYNC").size(9.0).strong()).clicked() {
                                 self.sync_to_pdf_request = true;
                             }
@@ -941,16 +955,62 @@ impl Gui {
             .show(ctx, |ui| {
                 if let Some(tex_id) = pdf_tex_id {
                     let image_size = ui.available_size();
-                    let response = ui.image(egui::load::SizedTexture::new(tex_id, image_size));
                     
-                    // Render SyncTeX highlight
+                    // Handle Zoom/Pan Interactions
+                    let response = ui.interact(ui.available_rect_before_wrap(), ui.id(), egui::Sense::drag());
+                    
+                    if response.dragged() {
+                        self.pdf_pan += response.drag_delta() / (image_size / 2.0);
+                    }
+
+                    // Handle Scroll-based Zoom
+                    let scroll_delta = ui.input(|i| i.smooth_scroll_delta.y);
+                    if scroll_delta != 0.0 {
+                        let zoom_factor = 1.0 + (scroll_delta / 100.0);
+                        self.pdf_zoom *= zoom_factor;
+                        // Limit zoom
+                        self.pdf_zoom = self.pdf_zoom.clamp(0.1, 10.0);
+                    }
+                    
+                    // We draw the PDF as a background in wgpu now, but we still want to show the texture in egui
+                    // if we want to use egui's layout. However, the requirement was to use a custom shader.
+                    // My custom shader is already drawing the background.
+                    // Let's draw a transparent image here to capture clicks and provide interaction.
+                    let image_response = ui.image(egui::load::SizedTexture::new(tex_id, image_size));
+                    
+                    // Render SyncTeX highlight (needs to be adjusted for zoom/pan)
                     if let Some(rect_ratio) = self.pdf_highlight_rect {
+                        // Adjusted for zoom/pan
+                        let scaled_rect = egui::Rect::from_min_size(
+                            egui::pos2(rect_ratio.min.x * self.pdf_zoom + self.pdf_pan.x, rect_ratio.min.y * self.pdf_zoom + self.pdf_pan.y),
+                            rect_ratio.size() * self.pdf_zoom
+                        );
+
                         let screen_rect = egui::Rect::from_min_size(
-                            response.rect.min + egui::vec2(rect_ratio.min.x * image_size.x, rect_ratio.min.y * image_size.y),
-                            egui::vec2(rect_ratio.width() * image_size.x, rect_ratio.height() * image_size.y)
+                            image_response.rect.min + egui::vec2(scaled_rect.min.x * image_size.x, scaled_rect.min.y * image_size.y),
+                            egui::vec2(scaled_rect.width() * image_size.x, scaled_rect.height() * image_size.y)
                         );
                         ui.painter().rect_filled(screen_rect, 0.0, Color32::from_rgba_unmultiplied(255, 255, 0, 80));
                     }
+
+                    // Floating Controls for PDF
+                    egui::Area::new(egui::Id::new("pdf_controls"))
+                        .anchor(egui::Align2::RIGHT_BOTTOM, egui::vec2(-10.0, -10.0))
+                        .show(ctx, |ui| {
+                            egui::Frame::none()
+                                .fill(Color32::from_rgb(30, 32, 35))
+                                .rounding(4.0)
+                                .inner_margin(egui::Margin::same(8.0))
+                                .show(ui, |ui| {
+                                    ui.horizontal(|ui| {
+                                        ui.label(RichText::new(format!("{:.0}%", self.pdf_zoom * 100.0)).size(10.0).color(Color32::WHITE));
+                                        if ui.button(RichText::new("RESET").size(10.0)).clicked() {
+                                            self.pdf_zoom = 1.0;
+                                            self.pdf_pan = egui::vec2(0.0, 0.0);
+                                        }
+                                    });
+                                });
+                        });
 
                     if response.double_clicked() {
                         if let Some(pos) = response.interact_pointer_pos() {
