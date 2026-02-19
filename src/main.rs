@@ -73,6 +73,9 @@ async fn main() {
                         render_pdf(&mut state, &pdf_renderer, &pdf_data);
                     }
                     WindowEvent::ScaleFactorChanged { .. } => {}
+                    WindowEvent::ModifiersChanged(new_modifiers) => {
+                        modifiers = *new_modifiers;
+                    }
                     WindowEvent::RedrawRequested => {
                         match state.render() {
                             Ok(_) => {}
