@@ -43,11 +43,13 @@ async fn main() {
     let pdf_data = std::fs::read("test.pdf").expect("Failed to read test.pdf");
 
     fn render_pdf(state: &mut renderer::State, pdf_renderer: &PdfRenderer, pdf_data: &[u8]) {
+        let timer = perf::PerfTimer::start("PDF Render");
         let width = state.size.width as u16;
         let height = state.size.height as u16;
         if let Ok(pixels) = pdf_renderer.render_page(pdf_data, 0, width, height) {
             state.update_texture(width as u32, height as u32, &pixels);
         }
+        timer.stop();
     }
 
     render_pdf(&mut state, &pdf_renderer, &pdf_data);
