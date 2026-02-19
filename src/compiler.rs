@@ -1,22 +1,24 @@
 use std::error::Error;
-use std::collections::HashMap;
+use ahash::AHashMap;
 use regex::Regex;
 use crate::vfs::Vfs;
-
 use crate::config::CompileBackend;
+use std::hash::{Hash, Hasher};
 
 pub struct Compiler {
-    cache: HashMap<String, Vec<u8>>,
+    cache: AHashMap<u64, Vec<u8>>,
     backend: CompileBackend,
-    file_hashes: HashMap<String, String>,
+    file_hashes: AHashMap<String, u64>,
+    pub active_file: Option<String>,
 }
 
 impl Compiler {
     pub fn new() -> Self {
         Self {
-            cache: HashMap::new(),
+            cache: AHashMap::new(),
             backend: CompileBackend::Internal,
-            file_hashes: HashMap::new(),
+            file_hashes: AHashMap::new(),
+            active_file: None,
         }
     }
 
@@ -28,7 +30,11 @@ impl Compiler {
         let (optimized_latex, _) = self.optimize_latex(latex, draft, vfs);
 
         // 3. Cache Check
-        let final_hash = format!("{:x}_{:?}", md5::compute(&optimized_latex), self.backend);
+        let mut hasher = ahash::AHasher::default();
+        optimized_latex.hash(&mut hasher);
+        self.backend.hash(&mut hasher);
+        let final_hash = hasher.finish();
+        
         if let Some(cached) = self.cache.get(&final_hash) {
             return Ok(cached.clone());
         }
@@ -36,7 +42,7 @@ impl Compiler {
         // 4. Execution
         let result = match self.backend {
             CompileBackend::Internal => self.compile_internal(&optimized_latex),
-            CompileBackend::Tectonic => self.compile_tectonic(&optimized_latex),
+            CompileBackend::Tectonic => self.compile_tectonic(&optimized_latex, vfs),
         }?;
 
         self.cache.insert(final_hash, result.clone());
@@ -45,22 +51,24 @@ impl Compiler {
 
     /// Extracted optimization logic for use in external compilation flows (like Latexmk)
     pub fn optimize_latex(&mut self, latex: &str, draft: bool, vfs: &Vfs) -> (String, bool) {
-        let current_includes = self.find_includes(latex);
+        let all_deps = self.find_includes(latex);
         let mut changed_subfiles = Vec::new();
 
-        for include in &current_includes {
-            let path = if include.ends_with(".tex") {
-                include.clone()
+        for dep in &all_deps {
+            let path = if dep.ends_with(".tex") {
+                dep.clone()
             } else {
-                format!("{}.tex", include)
+                format!("{}.tex", dep)
             };
 
             if let Some(content) = vfs.read_file(&path) {
-                let hash = format!("{:x}", md5::compute(&content));
+                let mut hasher = ahash::AHasher::default();
+                content.hash(&mut hasher);
+                let hash = hasher.finish();
                 let old_hash = self.file_hashes.get(&path);
                 
                 if old_hash != Some(&hash) {
-                    changed_subfiles.push(include.clone());
+                    changed_subfiles.push(dep.clone());
                     self.file_hashes.insert(path, hash);
                 }
             }
@@ -69,8 +77,31 @@ impl Compiler {
         let mut optimized_latex = latex.to_string();
         let mut is_incremental = false;
 
-        if !changed_subfiles.is_empty() && changed_subfiles.len() < current_includes.len() {
-            let include_only = format!("\\includeonly{{{}}}\n", changed_subfiles.join(","));
+        // Dynamic \includeonly Optimization
+        let mut target_includes = changed_subfiles;
+        
+        // If there's an active file in the editor, prioritize it to force LaTeX to skip others
+        if let Some(ref active) = self.active_file {
+            let active_base = active.strip_suffix(".tex").unwrap_or(active);
+            // Only use it if it's actually part of the includes
+            if all_deps.iter().any(|d| d == active_base) {
+                target_includes = vec![active_base.to_string()];
+            }
+        }
+
+        // Only inject \includeonly for files that are actually using \include (not \input)
+        let actual_includes: Vec<String> = Regex::new(r"\\include\{([^}]+)\}")
+            .unwrap()
+            .captures_iter(latex)
+            .map(|cap| cap[1].to_string())
+            .collect();
+
+        let final_targets: Vec<String> = target_includes.into_iter()
+            .filter(|t| actual_includes.contains(t))
+            .collect();
+
+        if !final_targets.is_empty() && final_targets.len() < actual_includes.len() {
+            let include_only = format!("\\includeonly{{{}}}\n", final_targets.join(","));
             if let Some(pos) = optimized_latex.find("\\begin{document}") {
                 optimized_latex.insert_str(pos, &include_only);
                 is_incremental = true;
@@ -127,10 +158,43 @@ impl Compiler {
         Ok(pdf.into_bytes())
     }
 
-    fn compile_tectonic(&self, latex: &str) -> Result<Vec<u8>, Box<dyn Error>> {
-        // Tectonic's latex_to_pdf uses MemoryIo internally to avoid disk I/O for the main document
-        // and returns the resulting PDF as a byte vector.
-        tectonic::latex_to_pdf(latex)
-            .map_err(|e| format!("Tectonic compilation failed: {}", e).into())
+    fn compile_tectonic(&self, latex: &str, vfs: &Vfs) -> Result<Vec<u8>, Box<dyn Error>> {
+        use tectonic::driver::{Driver, DriverHooks};
+        use tectonic::io::memory::MemoryIo;
+        use tectonic::status::plain::PlainStatusBackend;
+        use tectonic::config::PersistentConfig;
+
+        let mut mem_io = MemoryIo::new();
+        
+        // Populate MemoryIo from VFS
+        for entry in vfs.get_all_files() {
+            mem_io.write_file(entry.key(), entry.value().clone())
+                .map_err(|e| format!("VFS sync failed: {}", e))?;
+        }
+
+        // Write the main document (which might be optimized_latex)
+        mem_io.write_file("main.tex", latex.as_bytes().to_vec())
+            .map_err(|e| format!("Main file sync failed: {}", e))?;
+
+        let config = PersistentConfig::default();
+        let mut status = PlainStatusBackend::new();
+        
+        // Tectonic's default bundle
+        let bundle = tectonic::io::ite_bundle::IteBundle::default();
+
+        let mut hooks = DriverHooks::new(
+            Box::new(mem_io),
+            Box::new(bundle),
+            Box::new(status),
+        );
+
+        let mut driver = Driver::new(&config);
+        driver.run(&mut hooks, "main.tex")
+            .map_err(|e| format!("Tectonic compilation failed: {}", e))?;
+
+        let output_files = hooks.io.into_inner().unwrap().into_inner();
+        output_files.get("main.pdf")
+            .cloned()
+            .ok_or_else(|| "Tectonic produced no PDF output".into())
     }
 }
