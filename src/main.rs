@@ -109,6 +109,16 @@ async fn main() {
                     WindowEvent::ModifiersChanged(new_modifiers) => {
                         modifiers = *new_modifiers;
                     }
+                    WindowEvent::MouseInput {
+                        state: ElementState::Pressed,
+                        button: MouseButton::Left,
+                        ..
+                    } => {
+                        // In a real app we'd get the actual cursor position
+                        let offset = synctex::SyncTex::pdf_to_editor(0.0, 0.0, 0);
+                        editor.cursor = offset;
+                        println!("SyncTeX jump to offset: {}", offset);
+                    }
                     WindowEvent::RedrawRequested => {
                         match state.render() {
                             Ok(_) => {}
