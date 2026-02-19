@@ -287,11 +287,66 @@ impl Gui {
                         ui.centered_and_justified(|ui| ui.label(RichText::new("Library View").color(Color32::WHITE)));
                     },
                     DashTab::Templates => self.render_templates_content(ui),
+                    DashTab::Symbols => self.render_symbols_content(ui),
                     DashTab::Settings => {
                         ui.centered_and_justified(|ui| ui.label(RichText::new("Settings View").color(Color32::WHITE)));
                     }
                 }
             });
+    }
+
+    fn render_symbols_content(&mut self, ui: &mut egui::Ui) {
+        ui.add_space(16.0);
+        ui.horizontal(|ui| {
+            ui.add_space(24.0);
+            ui.label(RichText::new("Mathematical Symbols").font(FontId::new(20.0, egui::FontFamily::Proportional)).color(Color32::WHITE).strong());
+        });
+        
+        ui.add_space(32.0);
+        
+        let symbols = vec![
+            ("Σ", "\\sum"), ("Π", "\\prod"), ("∫", "\\int"), ("∞", "\\infty"),
+            ("α", "\\alpha"), ("β", "\\beta"), ("γ", "\\gamma"), ("δ", "\\delta"),
+            ("λ", "\\lambda"), ("μ", "\\mu"), ("π", "\\pi"), ("ω", "\\omega"),
+            ("√", "\\sqrt{x}"), ("∂", "\\partial"), ("∇", "\\nabla"), ("∈", "\\in"),
+            ("∀", "\\forall"), ("∃", "\\exists"), ("∄", "\\nexists"), ("∅", "\\emptyset"),
+        ];
+
+        egui::ScrollArea::vertical().show(ui, |ui| {
+            ui.horizontal_wrapped(|ui| {
+                ui.add_space(24.0);
+                ui.spacing_mut().item_spacing = egui::vec2(12.0, 12.0);
+                
+                for (icon, code) in symbols {
+                    if self.symbol_card(ui, icon, code).clicked() {
+                        // In real app, copy to clipboard or insert at cursor
+                    }
+                }
+            });
+        });
+    }
+
+    fn symbol_card(&self, ui: &mut egui::Ui, icon: &str, code: &str) -> egui::Response {
+        let response = egui::Frame::none()
+            .fill(Color32::from_rgb(18, 20, 23))
+            .rounding(4.0)
+            .stroke(egui::Stroke::new(1.0, Color32::from_rgb(30, 33, 38)))
+            .inner_margin(egui::Margin::same(16.0))
+            .show(ui, |ui| {
+                ui.set_width(100.0);
+                ui.vertical_centered(|ui| {
+                    ui.label(RichText::new(icon).size(20.0).color(Color32::WHITE));
+                    ui.add_space(4.0);
+                    ui.label(RichText::new(code).size(10.0).color(Color32::from_rgb(80, 85, 95)).font(FontId::monospace(9.0)));
+                });
+            }).response;
+        
+        let response = response.interact(egui::Sense::click());
+        if response.hovered() {
+            ui.painter().rect_stroke(response.rect, 4.0, egui::Stroke::new(1.0, Color32::from_rgb(60, 100, 200)));
+            ui.output_mut(|o| o.cursor_icon = egui::CursorIcon::PointingHand);
+        }
+        response
     }
 
     fn render_templates_content(&mut self, ui: &mut egui::Ui) {
