@@ -384,15 +384,19 @@ impl Gui {
         ];
 
         egui::ScrollArea::vertical().show(ui, |ui| {
-            ui.horizontal_wrapped(|ui| {
+            ui.horizontal(|ui| {
                 ui.add_space(24.0);
-                ui.spacing_mut().item_spacing = egui::vec2(12.0, 12.0);
-                
-                for (icon, code) in symbols {
-                    if self.symbol_card(ui, icon, code).clicked() {
-                        // In real app, copy to clipboard or insert at cursor
-                    }
-                }
+                ui.vertical(|ui| {
+                    ui.horizontal_wrapped(|ui| {
+                        ui.spacing_mut().item_spacing = egui::vec2(12.0, 12.0);
+                        for (icon, code) in symbols {
+                            if self.symbol_card(ui, icon, code).clicked() {
+                                // Action item
+                            }
+                        }
+                    });
+                });
+                ui.add_space(24.0);
             });
         });
     }
@@ -430,20 +434,23 @@ impl Gui {
         ui.add_space(32.0);
         
         egui::ScrollArea::vertical().show(ui, |ui| {
-            ui.horizontal_wrapped(|ui| {
+            ui.horizontal(|ui| {
                 ui.add_space(24.0);
-                ui.spacing_mut().item_spacing = egui::vec2(20.0, 20.0);
-                
-                for i in 0..self.templates.len() {
-                    let template = &self.templates[i];
-                    if self.template_card(ui, template).clicked() {
-                        self.template_selected_index = i;
-                        // For now just open editor with placeholder
-                        self.view = View::Editor;
-                        self.selected_project = Some(format!("New {}", template.name));
-                        self.ui_text = format!("% New {} template\n\\documentclass{{article}}\n\\begin{{document}}\nHello SokuTeX!\n\\end{{document}}", template.name);
-                    }
-                }
+                ui.vertical(|ui| {
+                    ui.horizontal_wrapped(|ui| {
+                        ui.spacing_mut().item_spacing = egui::vec2(20.0, 20.0);
+                        for i in 0..self.templates.len() {
+                            let template = &self.templates[i];
+                            if self.template_card(ui, template).clicked() {
+                                self.template_selected_index = i;
+                                self.view = View::Editor;
+                                self.selected_project = Some(format!("New {}", template.name));
+                                self.ui_text = format!("% New {} template\n\\documentclass{{article}}\n\\begin{{document}}\nHello SokuTeX!\n\\end{{document}}", template.name);
+                            }
+                        }
+                    });
+                });
+                ui.add_space(24.0);
             });
         });
     }
