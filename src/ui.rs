@@ -17,6 +17,7 @@ pub enum DashTab {
     Dashboard,
     Library,
     Templates,
+    Symbols,
     Settings,
 }
 
