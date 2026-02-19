@@ -4,7 +4,7 @@ use dashmap::DashMap;
 use std::sync::Arc;
 
 pub struct PdfRenderer {
-    cache: Arc<DashMap<(String, u16, u16, i32), Vec<u8>>>,
+    cache: Arc<DashMap<(u64, u16, u16, i32), Vec<u8>>>,
 }
 
 impl PdfRenderer {
@@ -14,10 +14,9 @@ impl PdfRenderer {
         })
     }
 
-    pub fn render_page(&self, pdf_data: &[u8], page_index: i32, width: u16, height: u16) -> Result<Vec<u8>, Box<dyn Error>> {
+    pub fn render_page(&self, pdf_data: &[u8], revision: u64, page_index: i32, width: u16, height: u16) -> Result<Vec<u8>, Box<dyn Error>> {
         // Create a unique key for this render
-        let data_hash = format!("{:x}", md5::compute(pdf_data));
-        let key = (data_hash, width, height, page_index);
+        let key = (revision, width, height, page_index);
         
         if let Some(cached) = self.cache.get(&key) {
             return Ok(cached.value().clone());
@@ -37,15 +36,10 @@ impl PdfRenderer {
         let samples = pixmap.samples();
         
         // Convert to BGRA
-        let mut bgra_samples = Vec::with_capacity(width as usize * height as usize * 4);
-        for i in (0..samples.len()).step_by(3) {
-            if i + 2 < samples.len() {
-                bgra_samples.push(samples[i+2]);
-                bgra_samples.push(samples[i+1]);
-                bgra_samples.push(samples[i]);
-                bgra_samples.push(255);
-            }
-        }
+        let bgra_samples: Vec<u8> = samples
+            .chunks_exact(3)
+            .flat_map(|rgb| [rgb[2], rgb[1], rgb[0], 255])
+            .collect();
         
         self.cache.insert(key, bgra_samples.clone());
         Ok(bgra_samples)
