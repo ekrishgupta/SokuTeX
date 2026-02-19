@@ -44,9 +44,9 @@ async fn main() {
 
     let mut state = renderer::State::new(&window).await;
     
-    // Initialize PDF Renderer
+    // Initialize PDF Renderer with the workspace preview
     let pdf_renderer = PdfRenderer::new().expect("Failed to initialize PdfRenderer");
-    let pdf_data = std::fs::read("test.pdf").expect("Failed to read test.pdf");
+    let initial_pdf_data = std::fs::read("workspace_preview.pdf").expect("Failed to read workspace_preview.pdf");
 
     fn render_pdf(state: &mut renderer::State, pdf_renderer: &PdfRenderer, pdf_data: &[u8]) {
         let timer = perf::PerfTimer::start("PDF Render");
@@ -58,7 +58,7 @@ async fn main() {
         timer.stop();
     }
 
-    render_pdf(&mut state, &pdf_renderer, &pdf_data);
+    render_pdf(&mut state, &pdf_renderer, &initial_pdf_data);
     let mut palette = palette::CommandPalette::new();
     let vfs = vfs::Vfs::new();
     vfs.write_file("main.tex", b"\\documentclass{article}\n\\begin{document}\nHello SokuTeX!\n\\end{document}".to_vec());
@@ -68,7 +68,7 @@ async fn main() {
 
     let mut editor = editor::Editor::new();
     if let Some(content) = vfs.read_file("main.tex") {
-        gui.ui_text = String::from_utf8_lossy(content).to_string();
+        gui.ui_text = String::from_utf8_lossy(&content).to_string();
         editor.buffer = ropey::Rope::from_str(&gui.ui_text);
     }
 

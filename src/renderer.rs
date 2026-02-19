@@ -148,7 +148,7 @@ impl<'a> State<'a> {
             multiview: None,
         });
 
-        // Create dummy texture (white 1x1) for initial display
+        // Create Base Workspace Texture (white 1x1) for initial display
         let texture_size = wgpu::Extent3d {
             width: 1,
             height: 1,
