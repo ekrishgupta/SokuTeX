@@ -40,6 +40,26 @@ impl Gui {
         visuals.selection.bg_fill = Color32::from_rgb(50, 60, 80);
         
         ctx.set_visuals(visuals);
+
+        // Load Custom Fonts
+        let mut fonts = egui::FontDefinitions::default();
+        
+        fonts.font_data.insert("premium_bold".to_owned(), 
+            egui::FontData::from_static(include_bytes!("../assets/fonts/Outfit-Bold.ttf")));
+        fonts.font_data.insert("premium_regular".to_owned(), 
+            egui::FontData::from_static(include_bytes!("../assets/fonts/Outfit-Regular.ttf")));
+        fonts.font_data.insert("mono_refined".to_owned(), 
+            egui::FontData::from_static(include_bytes!("../assets/fonts/JetBrainsMono-Regular.ttf")));
+
+        fonts.families.get_mut(&egui::FontFamily::Proportional).unwrap()
+            .insert(0, "premium_regular".to_owned());
+        fonts.families.get_mut(&egui::FontFamily::Monospace).unwrap()
+            .insert(0, "mono_refined".to_owned());
+        
+        // Custom family for the logo
+        fonts.families.insert(egui::FontFamily::Name("logo_font".into()), vec!["premium_bold".into()]);
+
+        ctx.set_fonts(fonts);
     }
 
     pub fn draw(&mut self, ctx: &egui::Context, pdf_tex_id: Option<egui::TextureId>) {
@@ -47,19 +67,38 @@ impl Gui {
             .min_width(350.0)
             .frame(egui::Frame::none().fill(Color32::from_rgb(10, 12, 14)))
             .show(ctx, |ui| {
-                ui.add_space(32.0);
-                ui.horizontal(|ui| {
-                    ui.add_space(32.0);
-                    ui.spacing_mut().item_spacing.x = 20.0;
-                    ui.label(RichText::new("STX").strong().color(Color32::WHITE).extra_letter_spacing(4.0));
-                    
-                    if ui.button(RichText::new("COMP").size(9.0)).clicked() {
-                        self.compile_status = "BUSY".to_string();
-                    }
-                    let _ = ui.button(RichText::new("SYNC").size(9.0));
-                });
+                // Top Control Bar Area - Centered with traffic lights
+                egui::Frame::none()
+                    .fill(Color32::from_rgb(10, 12, 14))
+                    .inner_margin(egui::Margin { left: 16.0, right: 16.0, top: 4.0, bottom: 4.0 })
+                    .show(ui, |ui| {
+                        ui.with_layout(egui::Layout::left_to_right(egui::Align::Center), |ui| {
+                            ui.add_space(64.0); // Clear traffic lights
+                            ui.spacing_mut().item_spacing.x = 16.0;
+                            
+                            // Visuals for buttons in the header
+                            ui.visuals_mut().widgets.inactive.bg_fill = Color32::from_rgb(30, 32, 35);
+                            ui.visuals_mut().widgets.hovered.bg_fill = Color32::from_rgb(45, 48, 52);
+
+                            // SokuTeX Brand
+                            ui.label(RichText::new("SokuTeX")
+                                .font(FontId::new(17.0, egui::FontFamily::Name("logo_font".into())))
+                                .color(Color32::WHITE)
+                                .extra_letter_spacing(0.1));
+                            
+                            ui.add_space(4.0);
+                            
+                            // Buttons row
+                            ui.spacing_mut().button_padding = egui::vec2(10.0, 3.0);
+                            if ui.button(RichText::new("COMP").size(9.0).strong()).clicked() {
+                                self.compile_status = "BUSY".to_string();
+                            }
+                            let _ = ui.button(RichText::new("SYNC").size(9.0).strong());
+                            let _ = ui.button(RichText::new("PROJ").size(9.0).strong());
+                        });
+                    });
                 
-                ui.add_space(16.0);
+                ui.add_space(8.0);
                 
                 egui::ScrollArea::vertical()
                     .id_source("editor_scroll")
@@ -78,16 +117,14 @@ impl Gui {
             });
 
         egui::CentralPanel::default()
-            .frame(egui::Frame::none().fill(Color32::from_rgb(18, 20, 23)))
+            .frame(egui::Frame::none().fill(Color32::from_rgb(255, 255, 255))) // PDF usually white base
             .show(ctx, |ui| {
                 if let Some(tex_id) = pdf_tex_id {
-                    let image_size = ui.available_size() * 0.95; // Add some breathing room
-                    ui.centered_and_justified(|ui| {
-                        ui.image(egui::load::SizedTexture::new(tex_id, image_size));
-                    });
+                    // Fill vertically and horizontally
+                    ui.image(egui::load::SizedTexture::new(tex_id, ui.available_size()));
                 } else {
                     ui.centered_and_justified(|ui| {
-                        ui.label(RichText::new("...").color(Color32::from_rgb(40, 45, 50)));
+                        ui.label(RichText::new("...").color(Color32::from_rgb(200, 200, 200)));
                     });
                 }
             });
