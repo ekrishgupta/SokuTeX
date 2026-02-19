@@ -1,9 +1,10 @@
 use winit::{
-    event::*,
+    event::{ElementState, Event, KeyEvent, WindowEvent, MouseButton},
     event_loop::{ControlFlow, EventLoop},
-    window::WindowBuilder,
     keyboard::{Key, NamedKey},
+    window::WindowBuilder,
 };
+use winit::platform::macos::WindowBuilderExtMacOS;
 
 mod compiler;
 mod renderer;
@@ -33,6 +34,10 @@ async fn main() {
     let event_loop = EventLoop::new().unwrap();
     let window = WindowBuilder::new()
         .with_title("SokuTeX")
+        .with_transparent(true)
+        .with_fullsize_content_view(true)
+        .with_titlebar_transparent(true)
+        .with_title_hidden(true)
         .build(&event_loop)
         .unwrap();
 

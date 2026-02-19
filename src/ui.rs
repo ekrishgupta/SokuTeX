@@ -47,7 +47,7 @@ impl Gui {
             .min_width(350.0)
             .frame(egui::Frame::none().fill(Color32::from_rgb(10, 12, 14)))
             .show(ctx, |ui| {
-                ui.add_space(24.0);
+                ui.add_space(32.0);
                 ui.horizontal(|ui| {
                     ui.add_space(32.0);
                     ui.spacing_mut().item_spacing.x = 20.0;
