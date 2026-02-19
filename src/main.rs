@@ -22,6 +22,9 @@ mod ui;
 mod syntax;
 mod autocomplete;
 mod watcher;
+mod latexmk;
+mod dependencies;
+
 
 use pdf_renderer::PdfRenderer;
 
@@ -69,7 +72,10 @@ async fn main() {
     render_pdf(&mut state, &pdf_renderer, &initial_pdf_data);
     let mut palette = palette::CommandPalette::new();
     let vfs = vfs::Vfs::new();
-    vfs.write_file("main.tex", b"\\documentclass{article}\n\\begin{document}\nHello SokuTeX!\n\\end{document}".to_vec());
+    vfs.write_file("main.tex", b"\\documentclass{article}\n\\input{sections/intro}\n\\include{sections/chapter1}\n\\begin{document}\nHello SokuTeX!\n\\end{document}".to_vec());
+    vfs.write_file("sections/intro.tex", b"\\section{Introduction}\nThis is a multi-file project.".to_vec());
+    vfs.write_file("sections/chapter1.tex", b"\\section{Chapter 1}\n\\input{sections/details}\nMore content here.".to_vec());
+    vfs.write_file("sections/details.tex", b"Detailed explanation...".to_vec());
 
     let mut gui = ui::Gui::new();
     ui::Gui::setup_visuals(&state.egui_ctx);
@@ -78,6 +84,7 @@ async fn main() {
     if let Some(content) = vfs.read_file("main.tex") {
         gui.ui_text = String::from_utf8_lossy(&content).to_string();
         editor.buffer = ropey::Rope::from_str(&gui.ui_text);
+        gui.dependency_tree = Some(crate::dependencies::DependencyScanner::scan("main.tex", &vfs));
     }
 
     let mut modifiers = winit::event::Modifiers::default();
@@ -133,10 +140,15 @@ async fn main() {
                             let tx = compile_tx.clone();
                             let text = gui.ui_text.clone();
                             let r_tx = result_tx.clone();
+                            let backend = gui.compile_backend;
                             tokio::spawn(async move {
                                 let (otx, orx) = tokio::sync::oneshot::channel();
                                 use crate::compiler_daemon::CompileRequest;
-                                if tx.send(CompileRequest::Compile { latex: text, response: otx }).await.is_ok() {
+                                if tx.send(CompileRequest::Compile { 
+                                    latex: text, 
+                                    backend, 
+                                    response: otx 
+                                }).await.is_ok() {
                                     if let Ok(pdf) = orx.await {
                                         let _ = r_tx.send(pdf).await;
                                     }
@@ -174,6 +186,11 @@ async fn main() {
                         let current_text = gui.ui_text.clone();
                         if editor.get_text() != current_text {
                             editor.buffer = ropey::Rope::from_str(&current_text);
+                            
+                            // Update VFS and scan for dependencies
+                            vfs.write_file("main.tex", current_text.as_bytes().to_vec());
+                            gui.dependency_tree = Some(crate::dependencies::DependencyScanner::scan("main.tex", &vfs));
+
                             tokio::spawn(async move {
                                 let _ = io::IoHandler::auto_save(current_text, "autosave.tex").await;
                             });
