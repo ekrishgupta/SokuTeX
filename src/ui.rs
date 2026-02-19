@@ -208,16 +208,17 @@ impl Gui {
         
         // High-Density Project List
         egui::ScrollArea::vertical().show(ui, |ui| {
+            ui.add_space(8.0);
             ui.horizontal(|ui| {
                 ui.add_space(24.0);
                 ui.vertical(|ui| {
+                    // Table Header
                     ui.horizontal(|ui| {
-                        ui.set_width(ui.available_width() - 24.0);
-                        ui.label(RichText::new("NAME").size(10.0).color(Color32::from_rgb(60, 65, 75)));
-                        ui.add_space(200.0);
-                        ui.label(RichText::new("PATH").size(10.0).color(Color32::from_rgb(60, 65, 75)));
-                        ui.add_space(ui.available_width() - 100.0);
-                        ui.label(RichText::new("MODIFIED").size(10.0).color(Color32::from_rgb(60, 65, 75)));
+                        ui.add_sized([240.0, 10.0], egui::Label::new(RichText::new("NAME").size(10.0).color(Color32::from_rgb(60, 65, 75))));
+                        ui.add_sized([350.0, 10.0], egui::Label::new(RichText::new("PATH").size(10.0).color(Color32::from_rgb(60, 65, 75))));
+                        ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
+                            ui.label(RichText::new("MODIFIED").size(10.0).color(Color32::from_rgb(60, 65, 75)));
+                        });
                     });
                     ui.add_space(8.0);
                     ui.separator();
@@ -258,14 +259,12 @@ impl Gui {
         let response = egui::Frame::none()
             .fill(bg)
             .rounding(2.0)
-            .inner_margin(egui::Margin::symmetric(14.0, 8.0))
+            .inner_margin(egui::Margin::symmetric(12.0, 8.0))
             .show(ui, |ui| {
-                ui.set_width(ui.available_width());
                 ui.horizontal(|ui| {
-                    ui.set_width(ui.available_width());
-                    ui.label(RichText::new(&project.name).color(text_color).font(FontId::new(13.0, egui::FontFamily::Proportional)));
-                    ui.add_space(20.0);
-                    ui.label(RichText::new(&project.path).size(11.0).color(Color32::from_rgb(60, 70, 80)));
+                    ui.add_sized([240.0, 18.0], egui::Label::new(RichText::new(&project.name).color(text_color).font(FontId::new(13.0, egui::FontFamily::Proportional))));
+                    ui.add_sized([350.0, 18.0], egui::Label::new(RichText::new(&project.path).size(11.0).color(Color32::from_rgb(60, 70, 80))));
+                    
                     ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
                         ui.label(RichText::new(&project.modified).size(11.0).color(Color32::from_rgb(100, 110, 120)));
                     });
