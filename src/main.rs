@@ -53,7 +53,7 @@ async fn main() {
     watcher.watch(".").expect("Failed to start watching directory");
     
     // Initialize PDF Renderer with the workspace preview
-    let pdf_renderer = PdfRenderer::new().expect("Failed to initialize PdfRenderer");
+    let pdf_renderer = std::sync::Arc::new(PdfRenderer::new().expect("Failed to initialize PdfRenderer"));
     let initial_pdf_data = std::fs::read("workspace_preview.pdf").expect("Failed to read workspace_preview.pdf");
 
     fn render_pdf(state: &mut renderer::State, pdf_renderer: &PdfRenderer, pdf_data: &[u8]) {
