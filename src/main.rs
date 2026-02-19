@@ -113,7 +113,7 @@ async fn main() {
                     }
                     WindowEvent::Resized(physical_size) => {
                         state.resize(*physical_size);
-                        render_pdf(&mut state, &pdf_renderer, &pdf_data);
+                        render_pdf(&mut state, &pdf_renderer, &initial_pdf_data);
                     }
                     WindowEvent::ScaleFactorChanged { .. } => {}
                     WindowEvent::ModifiersChanged(new_modifiers) => {
