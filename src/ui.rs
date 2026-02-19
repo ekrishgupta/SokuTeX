@@ -43,35 +43,24 @@ impl Gui {
     }
 
     pub fn draw(&mut self, ctx: &egui::Context, pdf_tex_id: Option<egui::TextureId>) {
-        let panel_color = ctx.style().visuals.panel_fill;
-        let panel_frame = egui::Frame::none()
-            .fill(panel_color)
-            .inner_margin(egui::Margin::symmetric(16.0, 12.0));
-
-        egui::TopBottomPanel::top("top_bar")
-            .frame(panel_frame.stroke(egui::Stroke::new(1.0, Color32::from_rgb(30, 33, 38))))
-            .show(ctx, |ui| {
-                ui.horizontal(|ui| {
-                    ui.spacing_mut().item_spacing.x = 24.0;
-                    ui.label(RichText::new("STX").strong().color(Color32::WHITE).extra_letter_spacing(4.0));
-                    
-                    if ui.button(RichText::new("COMP").size(10.0)).clicked() {
-                        self.compile_status = "BUSY".to_string();
-                    }
-                    let _ = ui.button(RichText::new("SYNC").size(10.0));
-                    
-                    ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
-                        if ui.button(RichText::new("×").size(16.0)).clicked() {
-                            // User can exit via ESC
-                        }
-                    });
-                });
-            });
-
         egui::SidePanel::left("editor_panel")
             .min_width(350.0)
             .frame(egui::Frame::none().fill(Color32::from_rgb(10, 12, 14)))
             .show(ctx, |ui| {
+                ui.add_space(24.0);
+                ui.horizontal(|ui| {
+                    ui.add_space(32.0);
+                    ui.spacing_mut().item_spacing.x = 20.0;
+                    ui.label(RichText::new("STX").strong().color(Color32::WHITE).extra_letter_spacing(4.0));
+                    
+                    if ui.button(RichText::new("COMP").size(9.0)).clicked() {
+                        self.compile_status = "BUSY".to_string();
+                    }
+                    let _ = ui.button(RichText::new("SYNC").size(9.0));
+                });
+                
+                ui.add_space(16.0);
+                
                 egui::ScrollArea::vertical()
                     .id_source("editor_scroll")
                     .show(ui, |ui| {
