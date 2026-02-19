@@ -111,7 +111,41 @@ impl Gui {
                 ui.add_space(24.0);
                 ui.horizontal(|ui| {
                     ui.add_space(32.0);
-                    ui.label(RichText::new("Recent Work").font(FontId::new(22.0, egui::FontFamily::Proportional)).color(Color32::WHITE));
+                    
+                    // Search Bar Mock
+                    egui::Frame::none()
+                        .fill(Color32::from_rgb(18, 20, 23))
+                        .rounding(6.0)
+                        .stroke(egui::Stroke::new(1.0, Color32::from_rgb(30, 33, 38)))
+                        .inner_margin(egui::Margin::symmetric(12.0, 6.0))
+                        .show(ui, |ui| {
+                            ui.set_width(300.0);
+                            ui.horizontal(|ui| {
+                                ui.label(RichText::new("🔍").size(10.0));
+                                ui.label(RichText::new("Search documents...").color(Color32::from_rgb(80, 85, 95)).size(12.0));
+                            });
+                        });
+                    
+                    ui.add_space(ui.available_width() - 120.0);
+                    
+                    // Profile Mock
+                    ui.horizontal(|ui| {
+                        ui.label(RichText::new("KG").color(Color32::WHITE).font(FontId::new(12.0, egui::FontFamily::Proportional)).strong());
+                        ui.add_space(4.0);
+                        egui::Frame::none()
+                            .fill(Color32::from_rgb(40, 45, 60))
+                            .rounding(4.0)
+                            .inner_margin(egui::Margin::symmetric(6.0, 2.0))
+                            .show(ui, |ui| {
+                                ui.label(RichText::new("PRO").color(Color32::from_rgb(150, 170, 255)).size(9.0).strong());
+                            });
+                    });
+                });
+
+                ui.add_space(40.0);
+                ui.horizontal(|ui| {
+                    ui.add_space(32.0);
+                    ui.label(RichText::new("Recent Work").font(FontId::new(20.0, egui::FontFamily::Proportional)).color(Color32::WHITE).strong());
                 });
                 
                 ui.add_space(24.0);
