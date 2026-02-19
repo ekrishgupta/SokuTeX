@@ -9,7 +9,7 @@ wgpu = "0.19"
 tokio = { version = "1.36", features = ["rt-multi-thread", "macros", "fs", "sync", "time"] }
 # tectonic = "0.15" 
 ropey = "1.6"
-pdfium-render = "0.8"
+mupdf = "0.6"
 image = "0.24"
 bytemuck = { version = "1.14", features = ["derive"] }
 pollster = "0.3"
