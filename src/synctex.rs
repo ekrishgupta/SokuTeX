@@ -1,6 +1,7 @@
 pub struct SyncTex;
 
 impl SyncTex {
+    #[allow(dead_code)]
     pub fn pdf_to_editor(_x: f32, _y: f32, _page: u16) -> usize {
         // Placeholder bridge
         0

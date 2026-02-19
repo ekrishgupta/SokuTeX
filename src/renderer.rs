@@ -17,6 +17,7 @@ pub struct State<'a> {
     pub egui_renderer: egui_wgpu::Renderer,
     pub pdf_texture_id: Option<egui::TextureId>,
     pdf_view: Option<wgpu::TextureView>,
+    pdf_texture: Option<wgpu::Texture>,
 }
 
 impl<'a> State<'a> {
@@ -232,6 +233,7 @@ impl<'a> State<'a> {
             egui_renderer,
             pdf_texture_id: None,
             pdf_view: None,
+            pdf_texture: None,
         }
     }
 
@@ -299,6 +301,7 @@ impl<'a> State<'a> {
         }
         self.pdf_texture_id = Some(self.egui_renderer.register_native_texture(&self.device, &view, wgpu::FilterMode::Linear));
         self.pdf_view = Some(view);
+        self.pdf_texture = Some(texture);
 
         // Update raw wgpu bind group too (for fallback/direct rendering if needed)
         let view_ref = self.pdf_view.as_ref().unwrap();

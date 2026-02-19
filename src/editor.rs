@@ -7,6 +7,7 @@ pub struct Editor {
     pub entries: Vec<crate::bib::BibEntry>,
 }
 
+#[allow(dead_code)]
 impl Editor {
     pub fn new() -> Self {
         Self {
