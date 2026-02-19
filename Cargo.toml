@@ -7,8 +7,8 @@ edition = "2021"
 winit = "0.29"
 wgpu = "0.19"
 tokio = { version = "1.36", features = ["rt-multi-thread", "macros", "fs", "sync", "time", "process", "io-util"] }
-tectonic = "0.15" 
 ropey = "1.6"
+
 mupdf = "0.6"
 image = "0.24"
 bytemuck = { version = "1.14", features = ["derive"] }
@@ -21,3 +21,4 @@ egui-wgpu = "0.27"
 dashmap = "5.5"
 ahash = "0.8"
 notify = "6.1.1"
+
