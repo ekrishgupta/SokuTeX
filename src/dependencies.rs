@@ -1,5 +1,5 @@
 use regex::Regex;
-use std::collections::HashSet;
+use ahash::AHashSet;
 use crate::vfs::Vfs;
 
 #[derive(Debug, Clone)]
@@ -12,11 +12,11 @@ pub struct DependencyScanner;
 
 impl DependencyScanner {
     pub fn scan(root_file: &str, vfs: &Vfs) -> DependencyNode {
-        let mut visited = HashSet::new();
+        let mut visited = AHashSet::new();
         Self::scan_recursive(root_file, vfs, &mut visited)
     }
 
-    fn scan_recursive(file_name: &str, vfs: &Vfs, visited: &mut HashSet<String>) -> DependencyNode {
+    fn scan_recursive(file_name: &str, vfs: &Vfs, visited: &mut AHashSet<String>) -> DependencyNode {
         let mut node = DependencyNode {
             name: file_name.to_string(),
             children: Vec::new(),
