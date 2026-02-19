@@ -20,6 +20,12 @@ pub enum DashTab {
     Settings,
 }
 
+pub struct Template {
+    pub name: String,
+    pub description: String,
+    pub icon: String,
+}
+
 pub struct Gui {
     pub view: View,
     pub active_tab: DashTab,
@@ -27,8 +33,10 @@ pub struct Gui {
     pub compile_status: String,
     pub selected_project: Option<String>,
     pub dash_selected_index: usize,
+    pub template_selected_index: usize,
     pub search_text: String,
     pub projects: Vec<ProjectItem>,
+    pub templates: Vec<Template>,
 }
 
 impl Gui {
@@ -40,6 +48,7 @@ impl Gui {
             compile_status: "Idle".to_string(),
             selected_project: None,
             dash_selected_index: 0,
+            template_selected_index: 0,
             search_text: String::new(),
             projects: vec![
                 ProjectItem { name: "Quantum Mech Notes".into(), modified: "2m ago".into(), path: "~/physics/mech.tex".into() },
@@ -47,6 +56,12 @@ impl Gui {
                 ProjectItem { name: "Dissertation Draft".into(), modified: "3d ago".into(), path: "~/uni/thesis/main.tex".into() },
                 ProjectItem { name: "Abstract Algebra".into(), modified: "1w ago".into(), path: "~/math/algebra.tex".into() },
                 ProjectItem { name: "CV 2024".into(), modified: "2w ago".into(), path: "~/personal/cv.tex".into() },
+            ],
+            templates: vec![
+                Template { name: "Scientific Paper".into(), description: "Nature-style two column layout".into(), icon: "📄".into() },
+                Template { name: "Modern CV".into(), description: "Minimalist engineering resume".into(), icon: "👤".into() },
+                Template { name: "Presentation".into(), description: "Beamer-based slide deck".into(), icon: "🖼".into() },
+                Template { name: "Lab Report".into(), description: "Structured data and formulas".into(), icon: "🧪".into() },
             ],
         }
     }
@@ -168,14 +183,67 @@ impl Gui {
                     DashTab::Library => {
                         ui.centered_and_justified(|ui| ui.label(RichText::new("Library View").color(Color32::WHITE)));
                     },
-                    DashTab::Templates => {
-                        ui.centered_and_justified(|ui| ui.label(RichText::new("Templates View").color(Color32::WHITE)));
-                    },
+                    DashTab::Templates => self.render_templates_content(ui),
                     DashTab::Settings => {
                         ui.centered_and_justified(|ui| ui.label(RichText::new("Settings View").color(Color32::WHITE)));
                     }
                 }
             });
+    }
+
+    fn render_templates_content(&mut self, ui: &mut egui::Ui) {
+        ui.add_space(16.0);
+        ui.horizontal(|ui| {
+            ui.add_space(24.0);
+            ui.label(RichText::new("Explore Templates").font(FontId::new(20.0, egui::FontFamily::Proportional)).color(Color32::WHITE).strong());
+        });
+        
+        ui.add_space(32.0);
+        
+        egui::ScrollArea::vertical().show(ui, |ui| {
+            ui.horizontal_wrapped(|ui| {
+                ui.add_space(24.0);
+                ui.spacing_mut().item_spacing = egui::vec2(20.0, 20.0);
+                
+                for i in 0..self.templates.len() {
+                    let template = &self.templates[i];
+                    if self.template_card(ui, template).clicked() {
+                        self.template_selected_index = i;
+                        // For now just open editor with placeholder
+                        self.view = View::Editor;
+                        self.selected_project = Some(format!("New {}", template.name));
+                        self.ui_text = format!("% New {} template\n\\documentclass{{article}}\n\\begin{{document}}\nHello SokuTeX!\n\\end{{document}}", template.name);
+                    }
+                }
+            });
+        });
+    }
+
+    fn template_card(&self, ui: &mut egui::Ui, template: &Template) -> egui::Response {
+        let (bg, border) = (Color32::from_rgb(15, 17, 20), Color32::from_rgb(30, 33, 38));
+        
+        let response = egui::Frame::none()
+            .fill(bg)
+            .rounding(8.0)
+            .stroke(egui::Stroke::new(1.0, border))
+            .inner_margin(egui::Margin::same(20.0))
+            .show(ui, |ui| {
+                ui.set_width(180.0);
+                ui.set_height(140.0);
+                ui.vertical(|ui| {
+                    ui.label(RichText::new(&template.icon).size(24.0));
+                    ui.add_space(12.0);
+                    ui.label(RichText::new(&template.name).color(Color32::WHITE).font(FontId::new(14.0, egui::FontFamily::Proportional)).strong());
+                    ui.add_space(4.0);
+                    ui.label(RichText::new(&template.description).color(Color32::from_rgb(100, 110, 120)).font(FontId::new(11.0, egui::FontFamily::Proportional)));
+                });
+            }).response;
+
+        let response = response.interact(egui::Sense::click());
+        if response.hovered() {
+            ui.output_mut(|o| o.cursor_icon = egui::CursorIcon::PointingHand);
+        }
+        response
     }
 
     fn render_dashboard_content(&mut self, ui: &mut egui::Ui) {
