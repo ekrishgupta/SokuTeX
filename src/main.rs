@@ -128,7 +128,7 @@ async fn main() {
     let mut current_pdf_revision = 0u64;
 
     // PDF Render Channel
-    let (pdf_tx, mut pdf_rx) = tokio::sync::mpsc::channel::<(u32, u32, Vec<u8>)>(2);
+    let (pdf_tx, mut pdf_rx) = tokio::sync::mpsc::channel::<(u32, u32, std::sync::Arc<Vec<u8>>)>(2);
 
     render_pdf(pdf_renderer.clone(), current_pdf_data.clone(), current_pdf_revision, 0, state.size.width as u16, state.size.height as u16, Some(pdf_tx.clone()));
     let mut palette = palette::CommandPalette::new();
@@ -176,7 +176,7 @@ async fn main() {
                     }
                     WindowEvent::Resized(physical_size) => {
                         state.resize(*physical_size);
-                        request_render(pdf_renderer.clone(), current_pdf_data.clone(), current_pdf_revision, state.size.width as u16, state.size.height as u16, pdf_tx.clone());
+                        render_pdf(pdf_renderer.clone(), current_pdf_data.clone(), current_pdf_revision, 0, state.size.width as u16, state.size.height as u16, Some(pdf_tx.clone()));
                     }
                     WindowEvent::ScaleFactorChanged { .. } => {}
                     WindowEvent::ModifiersChanged(new_modifiers) => {
@@ -211,7 +211,7 @@ async fn main() {
                         if let Ok(res) = result_rx.try_recv() {
                             current_pdf_revision = res.revision;
                             current_pdf_data = std::sync::Arc::new(res.pdf);
-                            request_render(pdf_renderer.clone(), current_pdf_data.clone(), current_pdf_revision, state.size.width as u16, state.size.height as u16, pdf_tx.clone());
+                            render_pdf(pdf_renderer.clone(), current_pdf_data.clone(), current_pdf_revision, 0, state.size.width as u16, state.size.height as u16, Some(pdf_tx.clone()));
                             
                             // Load SyncTeX if available
                             let mut stx = crate::synctex::SyncTex::new();
