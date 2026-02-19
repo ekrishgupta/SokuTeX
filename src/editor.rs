@@ -157,12 +157,12 @@ impl Editor {
         }
     }
 
-    pub fn move_to_line_start(&mut self) {
+    fn move_to_line_start(&mut self) {
         let line_idx = self.buffer.char_to_line(self.cursor);
         self.cursor = self.buffer.line_to_char(line_idx);
     }
 
-    pub fn move_to_line_end(&mut self) {
+    fn move_to_line_end(&mut self) {
         let line_idx = self.buffer.char_to_line(self.cursor);
         let line_start = self.buffer.line_to_char(line_idx);
         let line_len = self.buffer.line(line_idx).len_chars();
@@ -175,5 +175,44 @@ impl Editor {
 
     pub fn get_text(&self) -> String {
         self.buffer.to_string()
+    }
+
+    pub fn move_to_line(&mut self, line_num: usize) {
+        if line_num > 0 && line_num <= self.buffer.len_lines() {
+            self.cursor = self.buffer.line_to_char(line_num - 1);
+        }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_vim_modes() {
+        let mut editor = Editor::new();
+        assert_eq!(editor.mode, EditorMode::Normal);
+        
+        // Enter insert mode
+        editor.handle_key('i');
+        assert_eq!(editor.mode, EditorMode::Insert);
+        
+        // Type some text
+        editor.handle_key('h');
+        editor.handle_key('e');
+        editor.handle_key('l');
+        editor.handle_key('l');
+        editor.handle_key('o');
+        assert_eq!(editor.get_text(), "hello");
+        
+        // Escape to normal mode
+        editor.handle_key('\u{1b}');
+        assert_eq!(editor.mode, EditorMode::Normal);
+        
+        // Move left and delete char (vim 'x' at cursor)
+        editor.handle_key('h'); // cursor at 'o'
+        editor.handle_key('h'); // cursor at 'l'
+        editor.handle_key('x'); // delete 'l'
+        assert_eq!(editor.get_text(), "helo");
     }
 }
