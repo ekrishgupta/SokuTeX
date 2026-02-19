@@ -75,8 +75,8 @@ async fn main() {
                             draft,
                             response: otx 
                         }).await.is_ok() {
-                            if let Ok(pdf) = orx.await {
-                                let _ = result_tx_clone.send(pdf).await;
+                            if let Ok(res) = orx.await {
+                                let _ = result_tx_clone.send(res).await;
                             }
                         }
                     }
@@ -198,9 +198,9 @@ async fn main() {
                         }
 
                         // Check for compilation results
-                        if let Ok(new_pdf) = result_rx.try_recv() {
-                            current_pdf_revision += 1;
-                            current_pdf_data = std::sync::Arc::new(new_pdf);
+                        if let Ok(res) = result_rx.try_recv() {
+                            current_pdf_revision = res.revision;
+                            current_pdf_data = std::sync::Arc::new(res.pdf);
                             request_render(pdf_renderer.clone(), current_pdf_data.clone(), current_pdf_revision, state.size.width as u16, state.size.height as u16, pdf_tx.clone());
                             
                             // Load SyncTeX if available
