@@ -17,6 +17,7 @@ mod synctex;
 mod config;
 mod bib;
 mod perf;
+mod ui;
 
 use pdf_renderer::PdfRenderer;
 
@@ -56,11 +57,13 @@ async fn main() {
     let mut vfs = vfs::Vfs::new();
     vfs.write_file("main.tex", b"\\documentclass{article}\n\\begin{document}\nHello SokuTeX!\n\\end{document}".to_vec());
 
-    let mut ui_text = String::new();
+    let mut gui = ui::Gui::new();
+    ui::Gui::setup_visuals(&state.egui_ctx);
+
     let mut editor = editor::Editor::new();
     if let Some(content) = vfs.read_file("main.tex") {
-        ui_text = String::from_utf8_lossy(content).to_string();
-        editor.buffer = ropey::Rope::from_str(&ui_text);
+        gui.ui_text = String::from_utf8_lossy(content).to_string();
+        editor.buffer = ropey::Rope::from_str(&gui.ui_text);
     }
 
     let mut modifiers = winit::event::Modifiers::default();
@@ -106,75 +109,17 @@ async fn main() {
                         let pdf_texture_id = state.pdf_texture_id;
                         
                         let render_res = state.render(&window, |ctx| {
-                            let mut visuals = egui::Visuals::dark();
-                            visuals.window_fill = egui::Color32::from_rgb(15, 15, 15);
-                            visuals.panel_fill = egui::Color32::from_rgb(15, 15, 15);
-                            ctx.set_visuals(visuals);
-
-                            egui::TopBottomPanel::top("header").show(ctx, |ui| {
-                                ui.add_space(4.0);
-                                ui.horizontal(|ui| {
-                                    ui.add_space(8.0);
-                                    ui.label(egui::RichText::new("SokuTeX").strong().size(14.0));
-                                    ui.separator();
-                                    
-                                    if ui.button("Compile").clicked() {
-                                        println!("Manual compile triggered");
-                                    }
-                                    
-                                    ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
-                                        ui.add_space(8.0);
-                                        if ui.button("Expand").clicked() {}
-                                        if ui.button("Close").clicked() {
-                                            target.exit();
-                                        }
-                                    });
-                                });
-                                ui.add_space(4.0);
-                            });
-
-                            egui::SidePanel::left("editor_panel")
-                                .min_width(300.0)
-                                .frame(egui::Frame::none().fill(egui::Color32::from_rgb(10, 10, 10)))
-                                .show(ctx, |ui| {
-                                    ui.add_space(8.0);
-                                    ui.horizontal(|ui| {
-                                        ui.add_space(8.0);
-                                        ui.heading("Editor");
-                                    });
-                                    
-                                    egui::ScrollArea::vertical().show(ui, |ui| {
-                                        let resp = ui.add_sized(ui.available_size(), egui::TextEdit::multiline(&mut ui_text)
-                                            .font(egui::TextStyle::Monospace)
-                                            .frame(false)
-                                            .code_editor()
-                                            .lock_focus(true));
-                                        
-                                        if resp.changed() {
-                                            editor.buffer = ropey::Rope::from_str(&ui_text);
-                                            // Trigger auto-save
-                                            let text = ui_text.clone();
-                                            tokio::spawn(async move {
-                                                let _ = io::IoHandler::auto_save(text, "autosave.tex").await;
-                                            });
-                                        }
-                                    });
-                                });
-
-                            egui::CentralPanel::default()
-                                .frame(egui::Frame::none().fill(egui::Color32::from_rgb(20, 20, 20)))
-                                .show(ctx, |ui| {
-                                if let Some(tex_id) = pdf_texture_id {
-                                    ui.centered_and_justified(|ui| {
-                                        ui.image(egui::load::SizedTexture::new(tex_id, ui.available_size()));
-                                    });
-                                } else {
-                                    ui.centered_and_justified(|ui| {
-                                        ui.label(egui::RichText::new("Waiting for PDF...").italics());
-                                    });
-                                }
-                            });
+                            gui.draw(ctx, pdf_texture_id);
                         });
+
+                        // Sync back to editor and autosave if changed
+                        let current_text = gui.ui_text.clone();
+                        if editor.get_text() != current_text {
+                            editor.buffer = ropey::Rope::from_str(&current_text);
+                            tokio::spawn(async move {
+                                let _ = io::IoHandler::auto_save(current_text, "autosave.tex").await;
+                            });
+                        }
 
                         match render_res {
                             Ok(_) => {}

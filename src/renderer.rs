@@ -6,6 +6,7 @@ pub struct State<'a> {
     pub queue: wgpu::Queue,
     config: wgpu::SurfaceConfiguration,
     pub size: winit::dpi::PhysicalSize<u32>,
+    #[allow(dead_code)]
     render_pipeline: wgpu::RenderPipeline,
     bind_group: wgpu::BindGroup,
     texture_bind_group_layout: wgpu::BindGroupLayout, 
