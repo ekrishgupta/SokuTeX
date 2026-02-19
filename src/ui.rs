@@ -247,9 +247,10 @@ impl Gui {
                             ui.visuals_mut().widgets.inactive.bg_fill = Color32::from_rgb(30, 32, 35);
                             ui.visuals_mut().widgets.hovered.bg_fill = Color32::from_rgb(45, 48, 52);
 
-                            // Branding - Vertically centered with buttons via item_spacing or manual offset
-                            ui.label(RichText::new("SokuTeX")
-                                .font(FontId::new(17.0, egui::FontFamily::Name("logo_font".into())))
+                            // Branding / Project Name
+                            let title = self.selected_project.as_deref().unwrap_or("SokuTeX");
+                            ui.label(RichText::new(title)
+                                .font(FontId::new(16.0, egui::FontFamily::Name("logo_font".into())))
                                 .color(Color32::WHITE)
                                 .extra_letter_spacing(0.1));
                             
