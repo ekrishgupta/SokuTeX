@@ -170,7 +170,9 @@ impl Gui {
                 .rounding(8.0)
                 .stroke(egui::Stroke::new(1.0, Color32::from_rgb(40, 45, 50)))
                 .shadow(egui::epaint::Shadow { 
-                    extrusion: 30.0, 
+                    offset: egui::vec2(0.0, 10.0),
+                    blur: 30.0, 
+                    spread: 2.0,
                     color: Color32::from_black_alpha(150) 
                 }))
             .show(ctx, |ui| {
