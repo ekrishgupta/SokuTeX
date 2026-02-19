@@ -46,6 +46,11 @@ async fn main() {
         .unwrap();
 
     let mut state = renderer::State::new(&window).await;
+
+    // Start File Watcher
+    let (file_tx, mut file_rx) = tokio::sync::mpsc::channel(10);
+    let mut watcher = watcher::FileWatcher::new(file_tx).expect("Failed to setup file watcher");
+    watcher.watch(".").expect("Failed to start watching directory");
     
     // Initialize PDF Renderer with the workspace preview
     let pdf_renderer = PdfRenderer::new().expect("Failed to initialize PdfRenderer");
@@ -142,6 +147,15 @@ async fn main() {
                         // Check for compilation results
                         if let Ok(new_pdf) = result_rx.try_recv() {
                             render_pdf(&mut state, &pdf_renderer, &new_pdf);
+                        }
+
+                        // Check for external file changes
+                        if let Ok(crate::watcher::FileEvent::Modified(path)) = file_rx.try_recv() {
+                            if path.contains("main.tex") {
+                                if let Some(content) = vfs.read_file("main.tex") {
+                                    gui.ui_text = String::from_utf8_lossy(&content).to_string();
+                                }
+                            }
                         }
 
                         // Sync back to editor and autosave if changed
