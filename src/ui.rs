@@ -182,11 +182,18 @@ impl Gui {
                             ui.separator();
                             ui.add_space(8.0);
 
-                            for (i, project) in self.projects.iter().enumerate() {
+                            for i in 0..self.projects.len() {
                                 let is_selected = i == self.dash_selected_index;
+                                let project = &self.projects[i];
+                                let mut open_project = None;
+                                
                                 if self.project_row(ui, project, is_selected).clicked() {
+                                    open_project = Some(project.name.clone());
+                                }
+
+                                if open_project.is_some() {
                                     self.view = View::Editor;
-                                    self.selected_project = Some(project.name.clone());
+                                    self.selected_project = open_project;
                                 }
                             }
                         });
@@ -204,7 +211,7 @@ impl Gui {
             });
     }
 
-    fn project_row(&mut self, ui: &mut egui::Ui, project: &ProjectItem, selected: bool) -> egui::Response {
+    fn project_row(&self, ui: &mut egui::Ui, project: &ProjectItem, selected: bool) -> egui::Response {
         let bg = if selected { Color32::from_rgb(25, 28, 35) } else { Color32::TRANSPARENT };
         let text_color = if selected { Color32::WHITE } else { Color32::from_rgb(160, 170, 180) };
 
@@ -219,7 +226,7 @@ impl Gui {
                     ui.label(RichText::new(&project.name).color(text_color).font(FontId::new(13.0, egui::FontFamily::Proportional)));
                     ui.add_space(150.0);
                     ui.label(RichText::new(&project.path).size(11.0).color(Color32::from_rgb(60, 70, 80)));
-                    ui.with_layout(egui::Layout::right_to_right(egui::Align::Center), |ui| {
+                    ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
                         ui.label(RichText::new(&project.modified).size(11.0).color(Color32::from_rgb(100, 110, 120)));
                     });
                 });
