@@ -838,22 +838,34 @@ impl Gui {
                             }
                         });
 
-                        let resp = ui.add_sized(
-                            ui.available_size(),
-                            egui::TextEdit::multiline(&mut self.ui_text)
-                                .font(FontId::monospace(13.0))
-                                .frame(false)
-                                .margin(egui::Margin::same(32.0))
-                                .code_editor()
-                                .lock_focus(true)
-                                .desired_width(f32::INFINITY)
-                                .layouter(&mut |ui, string, wrap_width| {
-                                    let mut layout_job = crate::syntax::LatexSyntaxHighlighter::format_text(string);
-                                    layout_job.wrap.max_width = wrap_width;
-                                    ui.fonts(|f| f.layout_job(layout_job))
-                                })
-                        );
+                        let edit_output = egui::TextEdit::multiline(&mut self.ui_text)
+                            .font(FontId::monospace(13.0))
+                            .frame(false)
+                            .margin(egui::Margin::same(32.0))
+                            .code_editor()
+                            .lock_focus(true)
+                            .desired_width(f32::INFINITY)
+                            .min_size(ui.available_size())
+                            .layouter(&mut |ui, string, wrap_width| {
+                                let mut layout_job = crate::syntax::LatexSyntaxHighlighter::format_text(string);
+                                layout_job.wrap.max_width = wrap_width;
+                                ui.fonts(|f| f.layout_job(layout_job))
+                            })
+                            .show(ui);
+                            
+                        let galley_pos = edit_output.galley_pos;
+                        let galley = edit_output.galley.clone();
+                        let resp = edit_output.response;
 
+                        if let Some(pos) = resp.hover_pos() {
+                            let relative_pos = pos - galley_pos;
+                            let cursor = galley.cursor_from_pos(relative_pos);
+                            let char_idx = cursor.ccursor.index;
+                            
+                            if char_idx <= self.ui_text.len() {
+                                // Logic for detection will go here in next commits
+                            }
+                        }
                         if resp.double_clicked() {
                             self.sync_to_pdf_request = true;
                         }
