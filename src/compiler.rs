@@ -89,7 +89,11 @@ impl Compiler {
     }
 
     pub fn compile(&self, latex: &str, draft: bool, focus_mode: bool, vfs: &Vfs) -> Result<Vec<u8>, Box<dyn Error>> {
-        let (optimized_latex, _) = self.optimize_latex(latex, draft, focus_mode, vfs);
+        let (optimized_latex, _, deltas) = self.optimize_latex(latex, draft, focus_mode, vfs);
+
+        for delta in &deltas {
+            info!("Delta detected: {} ({} bytes) {} -> {}", delta.path, delta.content_size, delta.old_hash, delta.new_hash);
+        }
 
         // 3. Cache Check
         let mut hasher = ahash::AHasher::default();
@@ -140,7 +144,8 @@ impl Compiler {
     }
 
     /// Extracted optimization logic for use in external compilation flows (like Latexmk)
-    pub fn optimize_latex(&self, latex: &str, draft: bool, focus_mode: bool, vfs: &Vfs) -> (String, bool) {
+    pub fn optimize_latex(&self, latex: &str, draft: bool, focus_mode: bool, vfs: &Vfs) -> (String, bool, Vec<FileDelta>) {
+
         // 1. Identify all top-level \include units
         let include_re = INCLUDE_REGEX.get_or_init(|| Regex::new(r"\\include\{([^}]+)\}").unwrap());
         let top_level_units: Vec<String> = include_re
@@ -149,7 +154,7 @@ impl Compiler {
             .collect();
 
         if top_level_units.is_empty() {
-            return (self.apply_draft_mode(latex.to_string(), draft), false);
+            return (self.apply_draft_mode(latex.to_string(), draft), false, Vec::new());
         }
 
         // 2. Track changes across the entire dependency tree
@@ -273,7 +278,7 @@ impl Compiler {
             }
         }
 
-        (self.apply_draft_mode(optimized_latex, draft), is_incremental)
+        (self.apply_draft_mode(optimized_latex, draft), is_incremental, deltas)
     }
 
     fn apply_draft_mode(&self, mut latex: String, draft: bool) -> String {

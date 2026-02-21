@@ -78,8 +78,12 @@ impl CompilerDaemon {
                             if backend == CompileBackend::Latexmk {
                                 if let Some(ref mut latexmk) = self.latexmk {
                                     // Incremental Optimization: Inject \includeonly if possible
-                                    let (optimized_latex, is_incremental) = self.compiler.optimize_latex(&latex, draft, focus_mode, &self.vfs);
+                                    let (optimized_latex, is_incremental, deltas) = self.compiler.optimize_latex(&latex, draft, focus_mode, &self.vfs);
                                     
+                                    for delta in &deltas {
+                                        info!("Delta detected for Latexmk: {} ({} -> {})", delta.path, delta.old_hash, delta.new_hash);
+                                    }
+
                                     if is_incremental {
                                         info!("Transparent Incremental Compilation: injecting \\includeonly");
                                     }
