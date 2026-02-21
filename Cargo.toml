@@ -23,6 +23,7 @@ dashmap = "5.5"
 ahash = "0.8"
 notify = "6.1.1"
 md5 = "0.7"
+rayon = "1.10"
 
 [[bin]]
 name = "sokutex"

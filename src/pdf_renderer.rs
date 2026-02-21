@@ -9,6 +9,7 @@ use std::sync::Mutex;
 struct SendDocument(Document);
 unsafe impl Send for SendDocument {}
 
+#[allow(dead_code)]
 struct SendDisplayList(DisplayList);
 unsafe impl Send for SendDisplayList {}
 
@@ -16,6 +17,7 @@ pub struct PdfRenderer {
     // Cache for rendered pixmaps: (revision, page, width, height)
     cache: Arc<DashMap<(u64, i32, u16, u16), Arc<Vec<u8>>, RandomState>>,
     // Cache for interpreted display lists to avoid re-parsing the page
+    #[allow(dead_code)]
     dl_cache: DashMap<(u64, i32), Arc<SendDisplayList>, RandomState>,
     doc_cache: DashMap<u64, Arc<Mutex<SendDocument>>, RandomState>,
 }
