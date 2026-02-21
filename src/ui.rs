@@ -75,6 +75,7 @@ pub struct Gui {
     pub pdf_scroll_target: Option<(usize, f32, f32)>, // (page, x, y)
     pub pdf_highlight_rect: Option<egui::Rect>,
     pub active_file_path: String,
+    pub pdf_page_size: egui::Vec2, // Width, Height in points
     pub file_change_request: Option<String>,
     pub cursor_override: Option<usize>,
     
@@ -133,6 +134,7 @@ impl Gui {
             pdf_scroll_target: None,
             pdf_highlight_rect: None,
             active_file_path: "main.tex".to_string(),
+            pdf_page_size: egui::vec2(612.0, 792.0), // Default to Letter
             file_change_request: None,
             cursor_override: None,
             pdf_zoom: 1.0,
@@ -1008,19 +1010,19 @@ impl Gui {
                             let y_ratio = relative_pos.y / image_size.y;
                             
                             if let Some(ref stx) = self.synctex {
-                                // PDF coordinates (Letter: 612 x 792)
-                                let pdf_x = x_ratio * 612.0;
-                                let pdf_y = y_ratio * 792.0;
+                                // Use the actual page dimensions instead of hardcoded 612x792
+                                let pdf_x = x_ratio * self.pdf_page_size.x;
+                                let pdf_y = y_ratio * self.pdf_page_size.y;
                                 
                                 if let Some(node) = stx.backward_sync(1, pdf_x, pdf_y) {
                                     self.sync_to_editor_request = Some(node.line as usize);
                                     
                                     // Update highlight for inverse sync too
-                                    let x_ratio = node.x / 612.0;
-                                    let y_ratio = node.y / 792.0;
-                                    let w_ratio = node.width / 612.0;
-                                    let h_ratio = node.height / 792.0;
-                                    let d_ratio = node.depth / 792.0;
+                                    let x_ratio = node.x / self.pdf_page_size.x;
+                                    let y_ratio = node.y / self.pdf_page_size.y;
+                                    let w_ratio = node.width / self.pdf_page_size.x;
+                                    let h_ratio = node.height / self.pdf_page_size.y;
+                                    let d_ratio = node.depth / self.pdf_page_size.y;
                                     
                                     self.pdf_highlight_rect = Some(egui::Rect::from_min_size(
                                         egui::pos2(x_ratio, y_ratio - h_ratio),
@@ -1028,6 +1030,7 @@ impl Gui {
                                     ));
                                 }
                             }
+
                         }
                     }
                 } else {
