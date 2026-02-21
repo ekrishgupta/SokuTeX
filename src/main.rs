@@ -273,8 +273,36 @@ async fn main() {
                             
                             // Load SyncTeX if available
                             let mut stx = crate::synctex::SyncTex::new();
-                            // In a real app, this would be based on the project main file name
-                            if stx.load("main.synctex.gz").is_ok() || stx.load("main.synctex").is_ok() {
+                            let mut loaded = false;
+                            
+                            if let Some(ref data) = res.synctex_data {
+                                use std::io::Cursor;
+                                use flate2::read::GzDecoder;
+                                
+                                // Try Gz first if it looks like one, or just try both
+                                let cursor = Cursor::new(data);
+                                let mut decoder = GzDecoder::new(cursor);
+                                let mut decoded_data = Vec::new();
+                                use std::io::Read;
+                                if decoder.read_to_end(&mut decoded_data).is_ok() {
+                                    if stx.load_from_reader(Cursor::new(decoded_data)).is_ok() {
+                                        loaded = true;
+                                    }
+                                } else {
+                                    if stx.load_from_reader(Cursor::new(data)).is_ok() {
+                                        loaded = true;
+                                    }
+                                }
+                            }
+                            
+                            if !loaded {
+                                // Fallback to disk if not in result
+                                if stx.load("main.synctex.gz").is_ok() || stx.load("main.synctex").is_ok() {
+                                    loaded = true;
+                                }
+                            }
+                            
+                            if loaded {
                                 gui.synctex = Some(stx);
                             }
 
@@ -283,6 +311,7 @@ async fn main() {
                                 render_pdf(pdf_renderer.clone(), current_pdf_data.clone(), current_pdf_revision, i, state.size.width as u16, state.size.height as u16, None);
                             }
                         }
+
 
                         // Check for external file changes
                         if let Ok(crate::watcher::FileEvent::Modified(path)) = file_rx.try_recv() {
