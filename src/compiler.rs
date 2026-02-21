@@ -7,6 +7,7 @@ use crate::bib::BibParser;
 use std::hash::{Hash, Hasher};
 use std::collections::HashSet;
 use log::info;
+use rayon::prelude::*;
 
 use std::sync::OnceLock;
 
@@ -15,21 +16,23 @@ static INCLUDE_INPUT_REGEX: OnceLock<Regex> = OnceLock::new();
 static BIB_REGEX: OnceLock<Regex> = OnceLock::new();
 static BIBRESOURCE_REGEX: OnceLock<Regex> = OnceLock::new();
 
+use dashmap::DashMap;
+
 pub struct Compiler {
-    cache: AHashMap<u64, Vec<u8>>,
+    cache: DashMap<u64, Vec<u8>>,
     backend: CompileBackend,
-    file_hashes: AHashMap<String, u64>,
-    bib_cache: AHashMap<String, (u64, Vec<String>)>,
+    file_hashes: DashMap<String, u64>,
+    bib_cache: DashMap<String, (u64, Vec<String>)>,
     pub active_file: Option<String>,
 }
 
 impl Compiler {
     pub fn new() -> Self {
         Self {
-            cache: AHashMap::new(),
+            cache: DashMap::new(),
             backend: CompileBackend::Internal,
-            file_hashes: AHashMap::new(),
-            bib_cache: AHashMap::new(),
+            file_hashes: DashMap::new(),
+            bib_cache: DashMap::new(),
             active_file: None,
         }
     }
@@ -61,7 +64,7 @@ impl Compiler {
                 let hash = hasher.finish();
 
                 let needs_update = match self.bib_cache.get(&path) {
-                    Some((old_hash, _)) => *old_hash != hash,
+                    Some(val) => val.0 != hash,
                     None => true,
                 };
 
@@ -148,48 +151,61 @@ impl Compiler {
         let mut all_known_files = Vec::new();
         self.collect_all_dependencies("main.tex", vfs, &mut all_known_files, &mut HashSet::new());
 
-        // Update BibTeX cache for all dependencies
+        // Update BibTeX cache for all dependencies (Parallel)
         self.update_bib_cache(latex, vfs);
-        for path in &all_known_files {
+        all_known_files.par_iter().for_each(|path| {
             if let Some(content) = vfs.read_file(path) {
                 let content_str = String::from_utf8_lossy(&content);
                 self.update_bib_cache(&content_str, vfs);
             }
-        }
+        });
 
-        for path in all_known_files {
-            if let Some(content) = vfs.read_file(&path) {
-                let mut hasher = ahash::AHasher::default();
-                content.hash(&mut hasher);
-                let hash = hasher.finish();
-                let old_hash = self.file_hashes.get(&path);
-                
-                if old_hash != Some(&hash) {
-                    changed_files.insert(path.clone());
-                    self.file_hashes.insert(path, hash);
+        let changed_files: HashSet<String> = all_known_files.par_iter()
+            .filter_map(|path| {
+                if let Some(content) = vfs.read_file(path) {
+                    let mut hasher = ahash::AHasher::default();
+                    content.hash(&mut hasher);
+                    let hash = hasher.finish();
+                    
+                    let mut is_changed = false;
+                    self.file_hashes.entry(path.clone())
+                        .and_modify(|old| {
+                            if *old != hash {
+                                *old = hash;
+                                is_changed = true;
+                            }
+                        })
+                        .or_insert_with(|| {
+                            is_changed = true;
+                            hash
+                        });
+                    
+                    if is_changed {
+                        return Some(path.clone());
+                    }
                 }
-            }
-        }
+                None
+            })
+            .collect();
 
-        // 3. Determine which top-level units are affected
-        let mut affected_units = Vec::new();
-        for unit in &top_level_units {
-            let unit_path = if unit.ends_with(".tex") { unit.clone() } else { format!("{}.tex", unit) };
-            
-            // Check if unit itself changed
-            if changed_files.contains(&unit_path) {
-                affected_units.push(unit.clone());
-                continue;
-            }
+        // 3. Determine which top-level units are affected (Parallel)
+        let mut affected_units: Vec<String> = top_level_units.par_iter()
+            .filter(|unit| {
+                let unit_path = if unit.ends_with(".tex") { unit.to_string() } else { format!("{}.tex", unit) };
+                
+                // Check if unit itself changed
+                if changed_files.contains(&unit_path) {
+                    return true;
+                }
 
-            // Check if any recursive dependency of this unit changed
-            let mut unit_deps = Vec::new();
-            self.collect_all_dependencies(&unit_path, vfs, &mut unit_deps, &mut HashSet::new());
-            
-            if unit_deps.iter().any(|d| changed_files.contains(d)) {
-                affected_units.push(unit.clone());
-            }
-        }
+                // Check if any recursive dependency of this unit changed
+                let mut unit_deps = Vec::new();
+                self.collect_all_dependencies(&unit_path, vfs, &mut unit_deps, &mut HashSet::new());
+                
+                unit_deps.iter().any(|d| changed_files.contains(d))
+            })
+            .cloned()
+            .collect();
 
         // 4. Focus Mode & Priority logic
         if let Some(ref active) = self.active_file {
