@@ -1,5 +1,5 @@
 use std::error::Error;
-use ahash::AHashMap;
+
 use regex::Regex;
 use crate::vfs::Vfs;
 use crate::config::CompileBackend;
@@ -41,7 +41,7 @@ impl Compiler {
         self.backend = backend;
     }
 
-    pub fn update_bib_cache(&mut self, latex: &str, vfs: &Vfs) {
+    pub fn update_bib_cache(&self, latex: &str, vfs: &Vfs) {
         let bib_re = BIB_REGEX.get_or_init(|| Regex::new(r"\\bibliography\{([^}]+)\}").unwrap());
         let bibresource_re = BIBRESOURCE_REGEX.get_or_init(|| Regex::new(r"\\addbibresource\{([^}]+)\}").unwrap());
 
@@ -79,7 +79,7 @@ impl Compiler {
         }
     }
 
-    pub fn compile(&mut self, latex: &str, draft: bool, focus_mode: bool, vfs: &Vfs) -> Result<Vec<u8>, Box<dyn Error>> {
+    pub fn compile(&self, latex: &str, draft: bool, focus_mode: bool, vfs: &Vfs) -> Result<Vec<u8>, Box<dyn Error>> {
         let (optimized_latex, _) = self.optimize_latex(latex, draft, focus_mode, vfs);
 
         // 3. Cache Check
@@ -131,7 +131,7 @@ impl Compiler {
     }
 
     /// Extracted optimization logic for use in external compilation flows (like Latexmk)
-    pub fn optimize_latex(&mut self, latex: &str, draft: bool, focus_mode: bool, vfs: &Vfs) -> (String, bool) {
+    pub fn optimize_latex(&self, latex: &str, draft: bool, focus_mode: bool, vfs: &Vfs) -> (String, bool) {
         // 1. Identify all top-level \include units
         let include_re = INCLUDE_REGEX.get_or_init(|| Regex::new(r"\\include\{([^}]+)\}").unwrap());
         let top_level_units: Vec<String> = include_re
@@ -144,7 +144,6 @@ impl Compiler {
         }
 
         // 2. Track changes across the entire dependency tree
-        let mut changed_files = HashSet::new();
         
         // This is a bit expensive but necessary for "affected subtree" logic
         // We could optimize by only scanning if we haven't scanned recently
@@ -153,12 +152,12 @@ impl Compiler {
 
         // Update BibTeX cache for all dependencies (Parallel)
         self.update_bib_cache(latex, vfs);
-        all_known_files.par_iter().for_each(|path| {
+        for path in &all_known_files {
             if let Some(content) = vfs.read_file(path) {
                 let content_str = String::from_utf8_lossy(&content);
                 self.update_bib_cache(&content_str, vfs);
             }
-        });
+        }
 
         let changed_files: HashSet<String> = all_known_files.par_iter()
             .filter_map(|path| {
