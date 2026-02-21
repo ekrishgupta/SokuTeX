@@ -1,8 +1,22 @@
+use std::collections::VecDeque;
 use mupdf::{Document, Colorspace, Matrix, DisplayList};
 use std::error::Error;
 use dashmap::DashMap;
 use std::sync::Arc;
 use ahash::RandomState;
+
+pub struct Rect {
+    pub x: f32,
+    pub y: f32,
+    pub width: f32,
+    pub height: f32,
+}
+
+pub struct TileRenderQueue {
+    pub visible_tiles: VecDeque<(u16, u16)>, // Render immediately
+    pub adjacent_tiles: VecDeque<(u16, u16)>, // Next priority
+    pub offscreen_tiles: VecDeque<(u16, u16)>, // Low priority
+}
 
 use std::sync::Mutex;
 
