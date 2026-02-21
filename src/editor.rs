@@ -182,6 +182,74 @@ impl Editor {
             self.cursor = self.buffer.line_to_char(line_num - 1);
         }
     }
+
+    pub fn expand_or_jump_snippet(&mut self, autocomplete: &crate::autocomplete::AutocompleteEngine) -> Option<(usize, usize)> {
+        let mut start_idx = self.cursor;
+        while start_idx > 0 {
+            let c = self.buffer.char(start_idx - 1);
+            if c.is_whitespace() {
+                break;
+            }
+            start_idx -= 1;
+        }
+
+        if start_idx < self.cursor {
+            let word: String = self.buffer.slice(start_idx..self.cursor).chars().collect();
+            if let Some(snippet) = autocomplete.get_snippet(&word) {
+                // Remove word
+                self.buffer.remove(start_idx..self.cursor);
+                self.cursor = start_idx;
+
+                // Insert snippet
+                let snippet_start = self.cursor;
+                for c in snippet.chars() {
+                    self.buffer.insert_char(self.cursor, c);
+                    self.cursor += 1;
+                }
+                
+                // Reset cursor to start of snippet so jump logic finds the first placeholder
+                self.cursor = snippet_start;
+            }
+        }
+
+        let len = self.buffer.len_chars();
+        let mut search_idx = self.cursor;
+        
+        // Find next `$<digit>`
+        while search_idx < len.saturating_sub(1) {
+            if self.buffer.char(search_idx) == '$' {
+                let next_char = self.buffer.char(search_idx + 1);
+                if next_char.is_ascii_digit() {
+                    let mut end_idx = search_idx + 2;
+                    while end_idx < len && self.buffer.char(end_idx).is_ascii_digit() {
+                        end_idx += 1;
+                    }
+                    self.cursor = end_idx;
+                    return Some((search_idx, end_idx));
+                }
+            }
+            search_idx += 1;
+        }
+
+        // Optional wrap around, or just return None
+        let mut search_idx = 0;
+        while search_idx < self.cursor.saturating_sub(1) {
+            if self.buffer.char(search_idx) == '$' {
+                let next_char = self.buffer.char(search_idx + 1);
+                if next_char.is_ascii_digit() {
+                    let mut end_idx = search_idx + 2;
+                    while end_idx < len && self.buffer.char(end_idx).is_ascii_digit() {
+                        end_idx += 1;
+                    }
+                    self.cursor = end_idx;
+                    return Some((search_idx, end_idx));
+                }
+            }
+            search_idx += 1;
+        }
+
+        None
+    }
 }
 
 #[cfg(test)]
