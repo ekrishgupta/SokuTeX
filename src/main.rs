@@ -35,18 +35,19 @@ fn render_pdf(
     page: i32,
     width: u16,
     height: u16,
-    tx: Option<tokio::sync::mpsc::Sender<(u32, u32, std::sync::Arc<Vec<u8>>)>>,
+    tx: Option<tokio::sync::mpsc::Sender<(u32, u32, std::sync::Arc<Vec<u8>>, f32, f32)>>,
 ) {
     tokio::task::spawn_blocking(move || {
         let timer = perf::PerfTimer::start("PDF Render (Async)");
-        if let Ok(pixels) = pdf_renderer.render_page(&pdf_data, revision, page, width, height) {
+        if let Ok((pixels, pw, ph)) = pdf_renderer.render_page(&pdf_data, revision, page, width, height) {
             if let Some(tx) = tx {
-                let _ = tx.blocking_send((width as u32, height as u32, pixels));
+                let _ = tx.blocking_send((width as u32, height as u32, pixels, pw, ph));
             }
         }
         timer.stop();
     });
 }
+
 
 
 
@@ -140,7 +141,7 @@ async fn main() {
     let mut current_pdf_revision = 0u64;
 
     // PDF Render Channel
-    let (pdf_tx, mut pdf_rx) = tokio::sync::mpsc::channel::<(u32, u32, std::sync::Arc<Vec<u8>>)>(2);
+    let (pdf_tx, mut pdf_rx) = tokio::sync::mpsc::channel::<(u32, u32, std::sync::Arc<Vec<u8>>, f32, f32)>(2);
 
 
     render_pdf(pdf_renderer.clone(), current_pdf_data.clone(), current_pdf_revision, 0, state.size.width as u16, state.size.height as u16, Some(pdf_tx.clone()));
@@ -208,11 +209,15 @@ async fn main() {
                     }
                     WindowEvent::RedrawRequested => {
                         // Check for PDF render results
-                        if let Ok((w, h, pixels)) = pdf_rx.try_recv() {
+                        if let Ok((w, h, pixels, pw, ph)) = pdf_rx.try_recv() {
                             state.update_texture(w, h, &pixels);
+                            gui.pdf_page_size = egui::vec2(pw, ph);
                         }
 
-
+                        // Check for Tile render results
+                        if let Ok((x, y, size, pixels)) = tile_rx.try_recv() {
+                            state.update_texture_region(x as u32, y as u32, size as u32, size as u32, &pixels);
+                        }
 
                         let pdf_texture_id = state.pdf_texture_id;
 
@@ -220,6 +225,7 @@ async fn main() {
                         if let Some(line) = gui.sync_to_editor_request {
                             editor.move_to_line(line);
                         }
+
                         
                         // Update GPU Uniforms for PDF Transform
                         let zoom = gui.pdf_zoom;
