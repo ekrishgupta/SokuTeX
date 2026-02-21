@@ -11,6 +11,7 @@ pub enum LatexmkEvent {
 }
 
 pub struct LatexmkPvc {
+    #[allow(dead_code)]
     child: Child,
     stdin: tokio::process::ChildStdin,
 }
@@ -56,6 +57,7 @@ impl LatexmkPvc {
         Ok(())
     }
 
+    #[allow(dead_code)]
     pub async fn kill(mut self) -> tokio::io::Result<()> {
         self.child.kill().await
     }

@@ -12,7 +12,6 @@ use std::hash::Hash;
 pub struct CompileResult {
     pub pdf: Vec<u8>,
     pub revision: u64,
-    pub synctex_data: Option<Vec<u8>>,
 }
 
 pub enum CompileRequest {
@@ -94,13 +93,13 @@ impl CompilerDaemon {
                                     // Fallback if latexmk failed to start
                                     error!("Latexmk requested but not available. Falling back to internal.");
                                     if let Ok(pdf) = self.compiler.compile(&latex, draft, focus_mode, &self.vfs) {
-                                        self.update_revision_and_send(pdf, None, response);
+                                        self.update_revision_and_send(pdf, response);
                                     }
                                 }
                             } else {
                                 // Use Internal or Tectonic
                                 if let Ok(pdf) = self.compiler.compile(&latex, draft, focus_mode, &self.vfs) {
-                                    self.update_revision_and_send(pdf, None, response);
+                                    self.update_revision_and_send(pdf, response);
                                 }
                             }
                         }
@@ -113,15 +112,7 @@ impl CompilerDaemon {
                                 if let Some(response) = self.pending_response.take() {
                                     // 4. Read generated PDF and send back
                                     if let Ok(pdf_data) = fs::read("main.pdf").await {
-                                        let synctex_data = if let Ok(data) = fs::read("main.synctex.gz").await {
-                                            Some(data)
-                                        } else if let Ok(data) = fs::read("main.synctex").await {
-                                            Some(data)
-                                        } else {
-                                            None
-                                        };
-
-                                        self.update_revision_and_send(pdf_data, synctex_data, response);
+                                        self.update_revision_and_send(pdf_data, response);
                                     }
                                 }
                             }
@@ -135,7 +126,7 @@ impl CompilerDaemon {
         }
     }
 
-    fn update_revision_and_send(&mut self, pdf: Vec<u8>, synctex_data: Option<Vec<u8>>, response: oneshot::Sender<CompileResult>) {
+    fn update_revision_and_send(&mut self, pdf: Vec<u8>, response: oneshot::Sender<CompileResult>) {
         let mut hasher = ahash::AHasher::default();
         use std::hash::Hasher;
         pdf.hash(&mut hasher);
@@ -149,7 +140,6 @@ impl CompilerDaemon {
         let _ = response.send(CompileResult { 
             pdf, 
             revision: self.revision,
-            synctex_data,
         });
     }
 }
