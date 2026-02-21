@@ -78,10 +78,13 @@ pub struct Gui {
     pub pdf_page_size: egui::Vec2, // Width, Height in points
     pub file_change_request: Option<String>,
     pub cursor_override: Option<usize>,
+    pub selection_override: Option<(usize, usize)>,
     
     // PDF Interactive State
     pub pdf_zoom: f32,
     pub pdf_pan: egui::Vec2,
+    pub vfs: Option<std::sync::Arc<crate::vfs::Vfs>>,
+    pub image_cache: std::collections::HashMap<String, egui::TextureHandle>,
 }
 
 impl Gui {
@@ -137,8 +140,11 @@ impl Gui {
             pdf_page_size: egui::vec2(612.0, 792.0), // Default to Letter
             file_change_request: None,
             cursor_override: None,
+            selection_override: None,
             pdf_zoom: 1.0,
             pdf_pan: egui::vec2(0.0, 0.0),
+            vfs: None,
+            image_cache: std::collections::HashMap::new(),
         }
     }
 
@@ -825,6 +831,13 @@ impl Gui {
                 egui::ScrollArea::vertical()
                     .id_source("editor_scroll")
                     .show(ui, |ui| {
+                        let mut tab_pressed = false;
+                        ui.input_mut(|i| {
+                            if i.consume_key(egui::Modifiers::NONE, egui::Key::Tab) {
+                                tab_pressed = true;
+                            }
+                        });
+
                         let resp = ui.add_sized(
                             ui.available_size(),
                             egui::TextEdit::multiline(&mut self.ui_text)
@@ -870,7 +883,47 @@ impl Gui {
                             }
                         }
 
-                        if let Some(state) = egui::TextEdit::load_state(ui.ctx(), resp.id) {
+                        if let Some((start_idx, end_idx)) = self.selection_override.take() {
+                            if let Some(mut state) = egui::TextEdit::load_state(ui.ctx(), resp.id) {
+                                let ccursor_start = egui::text::CCursor::new(start_idx);
+                                let ccursor_end = egui::text::CCursor::new(end_idx);
+                                state.cursor.set_char_range(Some(egui::text::CCursorRange::two(ccursor_start, ccursor_end)));
+                                state.store(ui.ctx(), resp.id);
+                                ui.ctx().memory_mut(|m| m.request_focus(resp.id));
+                            }
+                        }
+
+                        if let Some(mut state) = egui::TextEdit::load_state(ui.ctx(), resp.id) {
+                            // Snippet / Tab logic
+                            if tab_pressed {
+                                let char_idx = state.cursor.char_range().map(|r| r.primary.index).unwrap_or(0);
+                                let mut temp_editor = crate::editor::Editor::new();
+                                temp_editor.buffer = ropey::Rope::from_str(&self.ui_text);
+                                temp_editor.cursor = char_idx;
+                                
+                                if let Some((start, end)) = temp_editor.expand_or_jump_snippet(&self.autocomplete) {
+                                    self.ui_text = temp_editor.buffer.to_string();
+                                    
+                                    let ccursor_start = egui::text::CCursor::new(start);
+                                    let ccursor_end = egui::text::CCursor::new(end);
+                                    state.cursor.set_char_range(Some(egui::text::CCursorRange::two(ccursor_start, ccursor_end)));
+                                    state.clone().store(ui.ctx(), resp.id);
+                                    ui.ctx().memory_mut(|m| m.request_focus(resp.id));
+                                } else {
+                                    // Normally insert tab if no snippet stuff
+                                    let mut new_text: String = self.ui_text.chars().take(char_idx).collect();
+                                    new_text.push_str("    ");
+                                    let suffix: String = self.ui_text.chars().skip(char_idx).collect();
+                                    new_text.push_str(&suffix);
+                                    self.ui_text = new_text;
+                                    
+                                    let ccursor = egui::text::CCursor::new(char_idx + 4);
+                                    state.cursor.set_char_range(Some(egui::text::CCursorRange::one(ccursor)));
+                                    state.clone().store(ui.ctx(), resp.id);
+                                    ui.ctx().memory_mut(|m| m.request_focus(resp.id));
+                                }
+                            }
+
                             // Simple prefix matching based on cursor
                             let char_idx = state.cursor.char_range().map(|r| r.primary.index).unwrap_or(0);
                             let text_up_to_cursor: String = self.ui_text.chars().take(char_idx).collect();
