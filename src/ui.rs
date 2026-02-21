@@ -1,5 +1,5 @@
 use egui::{Color32, FontId, RichText, Visuals};
-use crate::dependencies::{DependencyNode, DependencyScanner};
+use crate::dependencies::DependencyNode;
 
 
 #[derive(PartialEq)]

@@ -3,7 +3,7 @@ use tokio::process::{Child, Command};
 use tokio::io::{BufReader, AsyncBufReadExt, AsyncWriteExt};
 use std::path::PathBuf;
 use tokio::sync::mpsc;
-use log::{info, error};
+use log::info;
 
 pub enum LatexmkEvent {
     BuildStarted,
