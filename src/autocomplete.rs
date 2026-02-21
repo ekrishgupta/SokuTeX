@@ -9,12 +9,14 @@ pub struct AutocompleteNode {
 
 pub struct AutocompleteEngine {
     root: AutocompleteNode,
+    pub snippets: ahash::AHashMap<String, String>,
 }
 
 impl AutocompleteEngine {
     pub fn new() -> Self {
         let mut engine = Self {
             root: AutocompleteNode::default(),
+            snippets: ahash::AHashMap::new(),
         };
 
         // Seed with common high-frequency LaTeX commands
@@ -29,7 +31,25 @@ impl AutocompleteEngine {
             engine.insert(cmd);
         }
 
+        // Seed snippets
+        engine.snippets.insert(
+            "mat3".to_string(),
+            "\\begin{matrix}\n$1 & $2 & $3 \\\\\n$4 & $5 & $6 \\\\\n$7 & $8 & $9\n\\end{matrix}".to_string(),
+        );
+        engine.snippets.insert(
+            "enum".to_string(),
+            "\\begin{enumerate}\n  \\item $1\n\\end{enumerate}".to_string(),
+        );
+        engine.snippets.insert(
+            "item".to_string(),
+            "\\begin{itemize}\n  \\item $1\n\\end{itemize}".to_string(),
+        );
+
         engine
+    }
+
+    pub fn get_snippet(&self, trigger: &str) -> Option<&String> {
+        self.snippets.get(trigger)
     }
 
     pub fn insert(&mut self, word: &str) {
