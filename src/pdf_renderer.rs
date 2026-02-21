@@ -18,6 +18,57 @@ pub struct TileRenderQueue {
     pub offscreen_tiles: VecDeque<(u16, u16)>, // Low priority
 }
 
+impl TileRenderQueue {
+    pub fn new() -> Self {
+        Self {
+            visible_tiles: VecDeque::new(),
+            adjacent_tiles: VecDeque::new(),
+            offscreen_tiles: VecDeque::new(),
+        }
+    }
+
+    pub fn prioritize_tiles(&mut self, viewport: Rect, all_tiles: Vec<(u16, u16)>) {
+        self.visible_tiles.clear();
+        self.adjacent_tiles.clear();
+        self.offscreen_tiles.clear();
+
+        for (tx, ty) in all_tiles {
+            let tile_rect = Rect {
+                x: tx as f32 * 256.0,
+                y: ty as f32 * 256.0,
+                width: 256.0,
+                height: 256.0,
+            };
+
+            if self.intersects(&viewport, &tile_rect) {
+                self.visible_tiles.push_back((tx, ty));
+            } else if self.is_adjacent(&viewport, &tile_rect) {
+                self.adjacent_tiles.push_back((tx, ty));
+            } else {
+                self.offscreen_tiles.push_back((tx, ty));
+            }
+        }
+    }
+
+    fn intersects(&self, r1: &Rect, r2: &Rect) -> bool {
+        r1.x < r2.x + r2.width &&
+        r1.x + r1.width > r2.x &&
+        r1.y < r2.y + r2.height &&
+        r1.y + r1.height > r2.y
+    }
+
+    fn is_adjacent(&self, r1: &Rect, r2: &Rect) -> bool {
+        let margin = 256.0;
+        let expanded_r1 = Rect {
+            x: r1.x - margin,
+            y: r1.y - margin,
+            width: r1.width + margin * 2.0,
+            height: r1.height + margin * 2.0,
+        };
+        self.intersects(&expanded_r1, r2)
+    }
+}
+
 use std::sync::Mutex;
 
 struct SendDocument(Document);
