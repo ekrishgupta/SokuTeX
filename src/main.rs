@@ -154,6 +154,7 @@ async fn main() {
     let mut palette = palette::CommandPalette::new();
 
     let mut gui = ui::Gui::new();
+    gui.vfs = Some(vfs.clone());
     ui::Gui::setup_visuals(&state.egui_ctx);
 
     // Initial scan for .bib files in VFS
