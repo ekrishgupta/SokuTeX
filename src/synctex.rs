@@ -8,7 +8,6 @@ use flate2::read::GzDecoder;
 pub struct SyncTexNode {
     pub tag: u32,
     pub line: u32,
-    pub column: u32,
     pub x: f32,
     pub y: f32,
     pub width: f32,
@@ -104,7 +103,6 @@ impl SyncTex {
             self.nodes.push(SyncTexNode {
                 tag,
                 line: line_num,
-                column: 0,
                 x,
                 y,
                 width,

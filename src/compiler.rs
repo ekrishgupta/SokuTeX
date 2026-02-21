@@ -92,6 +92,7 @@ impl Compiler {
         // 4. Execution
         let result = match self.backend {
             CompileBackend::Internal => self.compile_internal(&optimized_latex),
+            CompileBackend::Tectonic => self.compile_tectonic(&optimized_latex),
             CompileBackend::Latexmk => {
                 return Err("Latexmk backend is handled asynchronously by the daemon".into());
             }
@@ -99,6 +100,31 @@ impl Compiler {
 
         self.cache.insert(final_hash, result.clone());
         Ok(result)
+    }
+
+    fn compile_tectonic(&self, latex: &str) -> Result<Vec<u8>, Box<dyn Error>> {
+        use std::process::Command;
+        use std::io::Write;
+        
+        // Tectonic: A complete, self-contained TeX/LaTeX engine
+        let temp_dir = std::env::temp_dir().join("sokutex_tectonic");
+        std::fs::create_dir_all(&temp_dir)?;
+        
+        let file_path = temp_dir.join("main.tex");
+        let mut file = std::fs::File::create(&file_path)?;
+        file.write_all(latex.as_bytes())?;
+        
+        let output = Command::new("tectonic")
+            .arg(&file_path)
+            .output()?;
+            
+        if !output.status.success() {
+            let stderr = String::from_utf8_lossy(&output.stderr);
+            return Err(format!("Tectonic compilation failed: {}", stderr).into());
+        }
+        
+        let pdf_path = temp_dir.join("main.pdf");
+        Ok(std::fs::read(pdf_path)?)
     }
 
     /// Extracted optimization logic for use in external compilation flows (like Latexmk)

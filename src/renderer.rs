@@ -17,6 +17,7 @@ pub struct State<'a> {
     #[allow(dead_code)]
     render_pipeline: wgpu::RenderPipeline,
     bind_group: wgpu::BindGroup,
+    #[allow(dead_code)]
     texture_bind_group_layout: wgpu::BindGroupLayout, 
     app_config: crate::config::Config,
     
@@ -25,6 +26,7 @@ pub struct State<'a> {
     pub egui_winit: egui_winit::State,
     pub egui_renderer: egui_wgpu::Renderer,
     pub pdf_texture_id: Option<egui::TextureId>,
+    #[allow(dead_code)]
     pdf_view: Option<wgpu::TextureView>,
     pdf_texture: Option<wgpu::Texture>,
 

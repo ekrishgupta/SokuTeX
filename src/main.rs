@@ -291,7 +291,7 @@ async fn main() {
                                     gui.ui_text = String::from_utf8_lossy(&content).to_string();
                                 }
                             } else if path.ends_with(".bib") {
-                                if let Some(content_bytes) = vfs.read_file(&path) {
+                                if let Some(_content_bytes) = vfs.read_file(&path) {
                                     // Refresh bibliography from all .bib files in VFS
                                     let mut bib_contents = Vec::new();
                                     for entry in vfs.get_all_files().iter() {
