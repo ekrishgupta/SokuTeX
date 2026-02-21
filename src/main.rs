@@ -65,7 +65,7 @@ async fn main() {
 
     // Start Compiler Daemon
     let (compile_tx, compile_rx) = tokio::sync::mpsc::channel(10);
-    let (result_tx, mut result_rx) = tokio::sync::mpsc::channel(1);
+    let (result_tx, mut result_rx) = tokio::sync::mpsc::channel::<(compiler_daemon::CompileResult, crate::dependencies::DependencyNode)>(1);
     let daemon = compiler_daemon::CompilerDaemon::new(compile_rx, vfs.clone());
     tokio::spawn(daemon.run());
 
@@ -73,6 +73,7 @@ async fn main() {
     let (debounce_tx, mut debounce_rx) = tokio::sync::mpsc::channel::<(String, crate::config::CompileBackend, bool, bool, Option<String>)>(10);
     let compile_tx_clone = compile_tx.clone();
     let result_tx_clone = result_tx.clone();
+    let vfs_clone = vfs.clone();
     tokio::spawn(async move {
         let mut last_req = None;
         let sleep = tokio::time::sleep(std::time::Duration::from_millis(150));
@@ -91,6 +92,10 @@ async fn main() {
                 }
                 _ = &mut sleep, if last_req.is_some() => {
                     if let Some((text, backend, draft, focus_mode, active_file)) = last_req.take() {
+                        // Batch multiple file changes: update VFS and scan dependencies only when debounced
+                        vfs_clone.write_file("main.tex", text.as_bytes().to_vec());
+                        let dep_tree = crate::dependencies::DependencyScanner::scan("main.tex", &vfs_clone);
+                        
                         let (otx, orx) = tokio::sync::oneshot::channel();
                         use crate::compiler_daemon::CompileRequest;
                         if compile_tx_clone.send(CompileRequest::Compile { 
@@ -102,7 +107,8 @@ async fn main() {
                             response: otx 
                         }).await.is_ok() {
                             if let Ok(res) = orx.await {
-                                let _ = result_tx_clone.send(res).await;
+                                // Send result AND updated tree back to UI
+                                let _ = result_tx_clone.send((res, dep_tree)).await;
                             }
                         }
                     }
@@ -252,24 +258,15 @@ async fn main() {
                             let focus_mode = gui.focus_mode;
                             let active_file = Some(gui.active_file_path.clone());
 
-                            // Update VFS and scan for dependencies before compiling
-                            vfs.write_file("main.tex", text.as_bytes().to_vec());
-                            gui.dependency_tree = Some(crate::dependencies::DependencyScanner::scan("main.tex", &vfs));
-
-                            // Async Autosave
-                            let save_text = text.clone();
-                            tokio::spawn(async move {
-                                let _ = io::IoHandler::auto_save(save_text, "autosave.tex").await;
-                            });
-
                             let tx = debounce_tx.clone();
                             tokio::spawn(async move {
                                 let _ = tx.send((text, backend, draft, focus_mode, active_file)).await;
                             });
                         }
 
-                        // Check for compilation results
-                        if let Ok(res) = result_rx.try_recv() {
+                        // Check for compilation results and updated dependency tree
+                        if let Ok((res, dep_tree)) = result_rx.try_recv() {
+                            gui.dependency_tree = Some(dep_tree);
                             current_pdf_revision = res.revision;
                             current_pdf_data = std::sync::Arc::new(res.pdf);
                             render_pdf(pdf_renderer.clone(), current_pdf_data.clone(), current_pdf_revision, 0, state.size.width as u16, state.size.height as u16, Some(pdf_tx.clone()));
