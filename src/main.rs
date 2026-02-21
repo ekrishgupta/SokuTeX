@@ -214,10 +214,7 @@ async fn main() {
                             gui.pdf_page_size = egui::vec2(pw, ph);
                         }
 
-                        // Check for Tile render results
-                        if let Ok((x, y, size, pixels)) = tile_rx.try_recv() {
-                            state.update_texture_region(x as u32, y as u32, size as u32, size as u32, &pixels);
-                        }
+
 
                         let pdf_texture_id = state.pdf_texture_id;
 

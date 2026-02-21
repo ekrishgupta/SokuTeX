@@ -105,6 +105,7 @@ impl SyncTex {
             self.nodes.push(SyncTexNode {
                 tag,
                 line: line_num,
+                column: 0,
                 x,
                 y,
                 width,
