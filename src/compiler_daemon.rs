@@ -12,6 +12,7 @@ use std::hash::Hash;
 pub struct CompileResult {
     pub pdf: Vec<u8>,
     pub revision: u64,
+    #[allow(dead_code)]
     pub synctex_data: Option<Vec<u8>>,
 }
 
@@ -77,7 +78,7 @@ impl CompilerDaemon {
                             if backend == CompileBackend::Latexmk {
                                 if let Some(ref mut latexmk) = self.latexmk {
                                     // Incremental Optimization: Inject \includeonly if possible
-                                    let (optimized_latex, is_incremental) = self.compiler.optimize_latex(&latex, draft, &self.vfs);
+                                    let (optimized_latex, is_incremental) = self.compiler.optimize_latex(&latex, draft, focus_mode, &self.vfs);
                                     
                                     if is_incremental {
                                         info!("Transparent Incremental Compilation: injecting \\includeonly");

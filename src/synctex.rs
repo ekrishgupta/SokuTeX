@@ -8,6 +8,8 @@ use flate2::read::GzDecoder;
 pub struct SyncTexNode {
     pub tag: u32,
     pub line: u32,
+    #[allow(dead_code)]
+    pub column: u32,
     pub x: f32,
     pub y: f32,
     pub width: f32,
