@@ -92,9 +92,6 @@ impl Compiler {
         // 4. Execution
         let result = match self.backend {
             CompileBackend::Internal => self.compile_internal(&optimized_latex),
-            CompileBackend::Tectonic => {
-                return Err("Tectonic backend is disabled.".into());
-            }
             CompileBackend::Latexmk => {
                 return Err("Latexmk backend is handled asynchronously by the daemon".into());
             }
@@ -312,5 +309,4 @@ impl Compiler {
 
         Ok(pdf.into_bytes())
     }
-
 }

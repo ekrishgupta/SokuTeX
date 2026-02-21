@@ -25,5 +25,5 @@ notify = "6.1.1"
 md5 = "0.7"
 
 [[bin]]
-name = "test_mupdf"
-path = "src/test_mupdf.rs"
+name = "sokutex"
+path = "src/main.rs"

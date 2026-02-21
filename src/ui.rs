@@ -741,7 +741,6 @@ impl Gui {
                                 .show_ui(ui, |ui| {
                                     use crate::config::CompileBackend;
                                     ui.selectable_value(&mut self.compile_backend, CompileBackend::Internal, "Internal");
-                                    ui.selectable_value(&mut self.compile_backend, CompileBackend::Tectonic, "Tectonic");
                                     ui.selectable_value(&mut self.compile_backend, CompileBackend::Latexmk, "Latexmk");
                                 });
 
