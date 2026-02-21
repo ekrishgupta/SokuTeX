@@ -1,6 +1,7 @@
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum CompileBackend {
     Internal,
+    Shadow,
     #[allow(dead_code)]
     Tectonic,
     Latexmk,

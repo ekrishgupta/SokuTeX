@@ -108,6 +108,7 @@ impl Compiler {
         // 4. Execution
         let result = match self.backend {
             CompileBackend::Internal => self.compile_internal(&optimized_latex),
+            CompileBackend::Shadow => self.compile_shadow(&optimized_latex),
             CompileBackend::Tectonic => self.compile_tectonic(&optimized_latex),
             CompileBackend::Latexmk => {
                 return Err("Latexmk backend is handled asynchronously by the daemon".into());
@@ -354,6 +355,38 @@ impl Compiler {
         let lines: Vec<String> = latex.lines().take(60).map(|s| s.to_string()).collect();
         let content_stream = lines.iter().enumerate().map(|(_i, line)| {
             format!("BT /F1 10 Td ({}) Tj ET", line.replace("(", "\\(").replace(")", "\\)"))
+        }).collect::<Vec<_>>().join("\n");
+
+        let pdf = format!(
+            "%PDF-1.4\n\
+            1 0 obj <</Type /Catalog /Pages 2 0 R>> endobj\n\
+            2 0 obj <</Type /Pages /Kids [3 0 R] /Count 1>> endobj\n\
+            3 0 obj <</Type /Page /Parent 2 0 R /Resources 4 0 R /MediaBox [0 0 595 842] /Contents 5 0 R>> endobj\n\
+            4 0 obj <</Font <</F1 <</Type /Font /Subtype /Type1 /BaseFont /Helvetica>>>> >> endobj\n\
+            5 0 obj <</Length {}>> stream\n\
+            {}\n\
+            endstream endobj\n\
+            xref\n\
+            0 6\n\
+            0000000000 65535 f\n\
+            trailer <</Size 6 /Root 1 0 R>> startxref 0 %%EOF",
+            content_stream.len(),
+            content_stream
+        );
+
+        Ok(pdf.into_bytes())
+    }
+
+    fn compile_shadow(&self, latex: &str) -> Result<Vec<u8>, Box<dyn Error>> {
+        // FAST SHADOW RENDERER
+        // Designed to provide near-zero latency feedback by doing an instant 
+        // visual approximation of the text as the user types,
+        // while the heavier tectonic run executes in the background.
+
+        let lines: Vec<String> = latex.lines().take(60).map(|s| s.to_string()).collect();
+        let content_stream = lines.iter().enumerate().map(|(i, line)| {
+            let y_pos = 800 - (i * 12);
+            format!("BT /F1 10 Tf 50 {} Td ({}) Tj ET", y_pos, line.replace("(", "\\(").replace(")", "\\)").replace("\\", "\\\\"))
         }).collect::<Vec<_>>().join("\n");
 
         let pdf = format!(
