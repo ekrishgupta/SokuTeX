@@ -18,6 +18,15 @@ static BIBRESOURCE_REGEX: OnceLock<Regex> = OnceLock::new();
 
 use dashmap::DashMap;
 
+#[derive(Debug, Clone)]
+pub struct FileDelta {
+    pub path: String,
+    pub old_hash: u64,
+    pub new_hash: u64,
+    pub content_size: usize,
+}
+
+
 pub struct Compiler {
     cache: DashMap<u64, Vec<u8>>,
     backend: CompileBackend,
@@ -159,33 +168,44 @@ impl Compiler {
             }
         }
 
-        let changed_files: HashSet<String> = all_known_files.par_iter()
+        let deltas: Vec<FileDelta> = all_known_files.par_iter()
             .filter_map(|path| {
                 if let Some(content) = vfs.read_file(path) {
                     let mut hasher = ahash::AHasher::default();
                     content.hash(&mut hasher);
-                    let hash = hasher.finish();
-                    
-                    let mut is_changed = false;
-                    self.file_hashes.entry(path.clone())
-                        .and_modify(|old| {
-                            if *old != hash {
-                                *old = hash;
-                                is_changed = true;
+                    let new_hash = hasher.finish();
+                    let content_size = content.len();
+
+                    let (old_hash, is_changed) = match self.file_hashes.entry(path.clone()) {
+                        dashmap::mapref::entry::Entry::Occupied(mut entry) => {
+                            let old = *entry.get();
+                            if old != new_hash {
+                                entry.insert(new_hash);
+                                (old, true)
+                            } else {
+                                (old, false)
                             }
-                        })
-                        .or_insert_with(|| {
-                            is_changed = true;
-                            hash
-                        });
+                        }
+                        dashmap::mapref::entry::Entry::Vacant(entry) => {
+                            entry.insert(new_hash);
+                            (0, true)
+                        }
+                    };
                     
                     if is_changed {
-                        return Some(path.clone());
+                        return Some(FileDelta {
+                            path: path.clone(),
+                            old_hash,
+                            new_hash,
+                            content_size,
+                        });
                     }
                 }
                 None
             })
             .collect();
+
+        let changed_files: HashSet<String> = deltas.iter().map(|d| d.path.clone()).collect();
 
         // 3. Determine which top-level units are affected (Parallel)
         let mut affected_units: Vec<String> = top_level_units.par_iter()
