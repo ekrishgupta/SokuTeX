@@ -85,6 +85,7 @@ pub struct PdfRenderer {
     #[allow(dead_code)]
     dl_cache: DashMap<(u64, i32), Arc<SendDisplayList>, RandomState>,
     doc_cache: DashMap<u64, Arc<Mutex<SendDocument>>, RandomState>,
+    pub render_queue: Mutex<TileRenderQueue>,
 }
 
 impl PdfRenderer {
@@ -93,7 +94,14 @@ impl PdfRenderer {
             cache: Arc::new(DashMap::with_hasher(RandomState::new())),
             dl_cache: DashMap::with_hasher(RandomState::new()),
             doc_cache: DashMap::with_hasher(RandomState::new()),
+            render_queue: Mutex::new(TileRenderQueue::new()),
         })
+    }
+
+    pub fn prioritize_tiles(&self, viewport: Rect, all_tiles: Vec<(u16, u16)>) {
+        if let Ok(mut queue) = self.render_queue.lock() {
+            queue.prioritize_tiles(viewport, all_tiles);
+        }
     }
 
 
