@@ -777,6 +777,14 @@ impl Gui {
                                 let tree = self.dependency_tree.clone();
                                 if let Some(tree) = tree {
                                     self.render_node_recursive(ui, &tree);
+                                    
+                                    ui.add_space(16.0);
+                                    ui.horizontal(|ui| {
+                                        ui.add_space(16.0);
+                                        ui.label(RichText::new("OUTLINE").size(10.0).color(Color32::from_rgb(100, 110, 120)).strong());
+                                    });
+                                    ui.add_space(8.0);
+                                    self.render_outline_recursive(ui, &tree);
                                 } else {
                                     ui.horizontal(|ui| {
                                         ui.add_space(16.0);
@@ -1088,6 +1096,34 @@ impl Gui {
                     self.file_change_request = Some(node.name.clone());
                 }
             });
+        }
+    }
+
+    fn render_outline_recursive(&mut self, ui: &mut egui::Ui, node: &DependencyNode) {
+        for item in &node.outline {
+            ui.horizontal(|ui| {
+                ui.add_space(16.0 + (item.level as f32) * 12.0);
+                
+                let icon = match item.level {
+                    0 => "📖",
+                    1 => "🔖",
+                    2 => "🔹",
+                    _ => "▫",
+                };
+
+                let label = RichText::new(format!("{} {}", icon, item.title))
+                    .size(11.0)
+                    .color(Color32::from_rgb(200, 200, 200));
+
+                if ui.selectable_label(false, label).clicked() {
+                    self.file_change_request = Some(item.file_name.clone());
+                    self.sync_to_editor_request = Some(item.line);
+                    self.sync_to_pdf_request = true;
+                }
+            });
+        }
+        for child in &node.children {
+            self.render_outline_recursive(ui, child);
         }
     }
 
