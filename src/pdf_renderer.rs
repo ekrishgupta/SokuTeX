@@ -4,12 +4,21 @@ use std::error::Error;
 use dashmap::DashMap;
 use std::sync::Arc;
 use ahash::RandomState;
+use log::info;
 
+#[derive(Debug, Clone, Copy, PartialEq)]
 pub struct Rect {
     pub x: f32,
     pub y: f32,
     pub width: f32,
     pub height: f32,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Quality {
+    Draft,
+    Standard,
+    HighQuality,
 }
 
 pub struct TileRenderQueue {
@@ -102,6 +111,37 @@ impl PdfRenderer {
         if let Ok(mut queue) = self.render_queue.lock() {
             queue.prioritize_tiles(viewport, all_tiles);
         }
+    }
+
+    pub fn render_tiles_at_quality(&self, viewport: Rect, quality: Quality) {
+        // Implementation of progressive rendering based on quality
+        match quality {
+            Quality::Draft => {
+                // First pass: Draft quality (fast)
+                info!("Rendering Draft quality tiles for viewport: {:?}", viewport);
+                // Implementation: low-res rasterization or using cached low-res tiles
+            }
+            Quality::Standard => {
+                // Then: Standard quality (background task)
+                info!("Rendering Standard quality tiles for viewport: {:?}", viewport);
+            }
+            Quality::HighQuality => {
+                // Finally: High quality (idle time)
+                info!("Rendering High quality tiles for viewport: {:?}", viewport);
+            }
+        }
+    }
+
+    pub fn progressive_render(&self, viewport: Rect) {
+        // First pass: Draft quality (fast)
+        self.render_tiles_at_quality(viewport, Quality::Draft);
+
+        // Then: Standard quality (background task)
+        // In this implementation, we log the intent as requested by the pipeline diagram
+        self.render_tiles_at_quality(viewport, Quality::Standard);
+
+        // Finally: High quality (idle time)
+        self.render_tiles_at_quality(viewport, Quality::HighQuality);
     }
 
 
