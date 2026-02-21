@@ -48,24 +48,7 @@ fn render_pdf(
     });
 }
 
-fn render_pdf_tile(
-    pdf_renderer: std::sync::Arc<PdfRenderer>,
-    pdf_data: std::sync::Arc<Vec<u8>>,
-    revision: u64,
-    page: i32,
-    width: u16,
-    height: u16,
-    tile_x: u16,
-    tile_y: u16,
-    tile_size: u16,
-    tx: tokio::sync::mpsc::Sender<(u16, u16, u16, std::sync::Arc<Vec<u8>>)>,
-) {
-    tokio::task::spawn_blocking(move || {
-        if let Ok(pixels) = pdf_renderer.render_tile(&pdf_data, revision, page, width, height, tile_x, tile_y, tile_size) {
-            let _ = tx.blocking_send((tile_x, tile_y, tile_size, pixels));
-        }
-    });
-}
+
 
 #[tokio::main]
 async fn main() {
@@ -77,6 +60,7 @@ async fn main() {
     vfs.write_file("sections/intro.tex", b"\\section{Introduction}\nThis is a multi-file project.".to_vec());
     vfs.write_file("sections/chapter1.tex", b"\\section{Chapter 1}\n\\input{sections/details}\nMore content here.".to_vec());
     vfs.write_file("sections/details.tex", b"Detailed explanation...".to_vec());
+    vfs.write_file("references.bib", b"@article{einstein1905,\n  author = {Einstein, Albert},\n  title = {On the Electrodynamics of Moving Bodies},\n  journal = {Annalen der Physik},\n  year = {1905}\n}\n@book{knuth1984,\n  author = {Knuth, Donald E.},\n  title = {The TeXbook},\n  year = {1984},\n  publisher = {Addison-Wesley}\n}".to_vec());
 
     // Start Compiler Daemon
     let (compile_tx, compile_rx) = tokio::sync::mpsc::channel(10);
@@ -157,13 +141,24 @@ async fn main() {
 
     // PDF Render Channel
     let (pdf_tx, mut pdf_rx) = tokio::sync::mpsc::channel::<(u32, u32, std::sync::Arc<Vec<u8>>)>(2);
-    let (tile_tx, mut tile_rx) = tokio::sync::mpsc::channel::<(u16, u16, u16, std::sync::Arc<Vec<u8>>)>(16);
+
 
     render_pdf(pdf_renderer.clone(), current_pdf_data.clone(), current_pdf_revision, 0, state.size.width as u16, state.size.height as u16, Some(pdf_tx.clone()));
     let mut palette = palette::CommandPalette::new();
 
     let mut gui = ui::Gui::new();
     ui::Gui::setup_visuals(&state.egui_ctx);
+
+    // Initial scan for .bib files in VFS
+    let mut bib_contents = Vec::new();
+    for entry in vfs.get_all_files().iter() {
+        if entry.key().ends_with(".bib") {
+            if let Ok(content) = String::from_utf8(entry.value().clone()) {
+                bib_contents.push(content);
+            }
+        }
+    }
+    gui.refresh_bibliography(bib_contents);
 
     let mut editor = editor::Editor::new();
     if let Some(content) = vfs.read_file("main.tex") {
@@ -217,10 +212,7 @@ async fn main() {
                             state.update_texture(w, h, &pixels);
                         }
 
-                        // Check for Tile render results
-                        if let Ok((x, y, size, pixels)) = tile_rx.try_recv() {
-                            state.update_texture_region(x as u32, y as u32, size as u32, size as u32, &pixels);
-                        }
+
 
                         let pdf_texture_id = state.pdf_texture_id;
 
@@ -298,6 +290,19 @@ async fn main() {
                                 if let Some(content) = vfs.read_file("main.tex") {
                                     gui.ui_text = String::from_utf8_lossy(&content).to_string();
                                 }
+                            } else if path.ends_with(".bib") {
+                                if let Some(content_bytes) = vfs.read_file(&path) {
+                                    // Refresh bibliography from all .bib files in VFS
+                                    let mut bib_contents = Vec::new();
+                                    for entry in vfs.get_all_files().iter() {
+                                        if entry.key().ends_with(".bib") {
+                                            if let Ok(content) = String::from_utf8(entry.value().clone()) {
+                                                bib_contents.push(content);
+                                            }
+                                        }
+                                    }
+                                    gui.refresh_bibliography(bib_contents);
+                                }
                             }
                         }
 
@@ -325,6 +330,17 @@ async fn main() {
                             // Update VFS and scan for dependencies
                             vfs.write_file(&gui.active_file_path, current_text.as_bytes().to_vec());
                             gui.dependency_tree = Some(crate::dependencies::DependencyScanner::scan("main.tex", &vfs));
+
+                            // Refresh bibliography from all .bib files in VFS
+                            let mut bib_contents = Vec::new();
+                            for entry in vfs.get_all_files().iter() {
+                                if entry.key().ends_with(".bib") {
+                                    if let Ok(content) = String::from_utf8(entry.value().clone()) {
+                                        bib_contents.push(content);
+                                    }
+                                }
+                            }
+                            gui.refresh_bibliography(bib_contents);
 
                             tokio::spawn(async move {
                                 let _ = io::IoHandler::auto_save(current_text, "autosave.tex").await;

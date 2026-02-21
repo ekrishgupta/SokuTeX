@@ -125,26 +125,7 @@ impl Gui {
             dependency_tree: None,
             show_dependencies: true,
             show_bib_panel: false,
-            bib_entries: crate::bib::BibParser::parse(r#"
-@article{einstein1905,
-  author = {Einstein, Albert},
-  title = {On the Electrodynamics of Moving Bodies},
-  journal = {Annalen der Physik},
-  year = {1905}
-}
-@book{knuth1984,
-  author = {Knuth, Donald E.},
-  title = {The TeXbook},
-  year = {1984},
-  publisher = {Addison-Wesley}
-}
-@article{shannon1948,
-  author = {Shannon, Claude E.},
-  title = {A Mathematical Theory of Communication},
-  journal = {Bell System Technical Journal},
-  year = {1948}
-}
-"#),
+            bib_entries: Vec::new(),
             bib_search: String::new(),
             synctex: None,
             sync_to_editor_request: None,
@@ -156,6 +137,14 @@ impl Gui {
             cursor_override: None,
             pdf_zoom: 1.0,
             pdf_pan: egui::vec2(0.0, 0.0),
+        }
+    }
+
+    pub fn refresh_bibliography(&mut self, bib_contents: Vec<String>) {
+        self.bib_entries.clear();
+        for content in bib_contents {
+            let mut entries = crate::bib::BibParser::parse(&content);
+            self.bib_entries.append(&mut entries);
         }
     }
 
