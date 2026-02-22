@@ -181,13 +181,12 @@ impl PdfRenderer {
         let samples = pixmap.samples();
         
         // Convert to BGRA
-        let mut bgra_samples = vec![0u8; (samples.len() / 3) * 4];
-        for (src, dst) in samples.chunks_exact(3).zip(bgra_samples.chunks_exact_mut(4)) {
-            dst[0] = src[2];
-            dst[1] = src[1];
-            dst[2] = src[0];
-            dst[3] = 255;
-        }
+        let mut bgra_samples = vec![255u8; width as usize * height as usize * 4];
+        bgra_samples.chunks_exact_mut(4).zip(samples.chunks_exact(3)).for_each(|(bgra, rgb)| {
+            bgra[0] = rgb[2];
+            bgra[1] = rgb[1];
+            bgra[2] = rgb[0];
+        });
         
         let arc_samples = Arc::new(bgra_samples);
         self.cache.insert(key, arc_samples.clone());
