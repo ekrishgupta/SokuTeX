@@ -192,6 +192,9 @@ async fn main() {
     let (pdf_tx, mut pdf_rx) = tokio::sync::mpsc::channel::<(u32, u32, std::sync::Arc<Vec<u8>>, f32, f32)>(2);
 
 
+    // Dependency render channel
+    let (dep_tx, mut dep_rx) = tokio::sync::mpsc::channel::<crate::dependencies::DependencyNode>(10);
+
     render_pdf(pdf_renderer.clone(), current_pdf_data.clone(), current_pdf_revision, 0, state.size.width as u16, state.size.height as u16, Some(pdf_tx.clone()));
     let mut palette = palette::CommandPalette::new();
 
@@ -308,6 +311,10 @@ async fn main() {
                         }
 
                         // Check for compilation results and updated dependency tree
+                        if let Ok(dep_tree) = dep_rx.try_recv() {
+                            gui.dependency_tree = Some(dep_tree);
+                        }
+
                         if let Ok((res, dep_tree)) = result_rx.try_recv() {
                             gui.dependency_tree = Some(dep_tree);
                             current_pdf_revision = res.revision;
@@ -390,7 +397,19 @@ async fn main() {
                                 editor.buffer = ropey::Rope::from_str(&gui.ui_text);
                                 gui.last_compile_text = gui.ui_text.clone();
                                 gui.prev_ui_text = gui.ui_text.clone();
-                                gui.dependency_tree = Some(crate::dependencies::DependencyScanner::scan("main.tex", &vfs));
+                                
+                                let dtx = dep_tx.clone();
+                                let rtx = compile_tx.clone();
+                                tokio::spawn(async move {
+                                    let (otx, orx) = tokio::sync::oneshot::channel();
+                                    let _ = rtx.send(crate::compiler_daemon::CompileRequest::ScanDependencies {
+                                        main_file: "main.tex".to_string(),
+                                        response: otx,
+                                    }).await;
+                                    if let Ok(tree) = orx.await {
+                                        let _ = dtx.send(tree).await;
+                                    }
+                                });
                             }
                         }
 
@@ -399,9 +418,21 @@ async fn main() {
                         if editor.get_text() != current_text {
                             editor.buffer = ropey::Rope::from_str(&current_text);
                             
-                            // Update VFS and scan for dependencies
+                            // Update VFS and request async dependency scan
                             vfs.write_file(&gui.active_file_path, current_text.as_bytes().to_vec());
-                            gui.dependency_tree = Some(crate::dependencies::DependencyScanner::scan("main.tex", &vfs));
+                            
+                            let dtx = dep_tx.clone();
+                            let rtx = compile_tx.clone();
+                            tokio::spawn(async move {
+                                let (otx, orx) = tokio::sync::oneshot::channel();
+                                let _ = rtx.send(crate::compiler_daemon::CompileRequest::ScanDependencies {
+                                    main_file: "main.tex".to_string(),
+                                    response: otx,
+                                }).await;
+                                if let Ok(tree) = orx.await {
+                                    let _ = dtx.send(tree).await;
+                                }
+                            });
 
                             // Refresh bibliography from all .bib files in VFS
                             let mut bib_contents = Vec::new();

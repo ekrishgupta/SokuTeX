@@ -25,6 +25,10 @@ pub enum CompileRequest {
         active_file: Option<String>,
         response: oneshot::Sender<CompileResult>,
     },
+    ScanDependencies {
+        main_file: String,
+        response: oneshot::Sender<crate::dependencies::DependencyNode>,
+    },
 }
 
 pub struct CompilerDaemon {
@@ -108,6 +112,10 @@ impl CompilerDaemon {
                                     self.update_revision_and_send(pdf, None, response);
                                 }
                             }
+                        }
+                        CompileRequest::ScanDependencies { main_file, response } => {
+                            let tree = crate::dependencies::DependencyScanner::scan(&main_file, &self.vfs);
+                            let _ = response.send(tree);
                         }
                     }
                 }
