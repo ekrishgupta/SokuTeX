@@ -217,7 +217,19 @@ async fn main() {
     if let Some(content) = vfs.read_file("main.tex") {
         gui.ui_text = String::from_utf8_lossy(&content).to_string();
         editor.buffer = ropey::Rope::from_str(&gui.ui_text);
-        gui.dependency_tree = Some(crate::dependencies::DependencyScanner::scan("main.tex", &vfs));
+        
+        let dtx = dep_tx.clone();
+        let rtx = compile_tx.clone();
+        tokio::spawn(async move {
+            let (otx, orx) = tokio::sync::oneshot::channel();
+            let _ = rtx.send(crate::compiler_daemon::CompileRequest::ScanDependencies {
+                main_file: "main.tex".to_string(),
+                response: otx,
+            }).await;
+            if let Ok(tree) = orx.await {
+                let _ = dtx.send(tree).await;
+            }
+        });
     }
 
     let mut modifiers = winit::event::Modifiers::default();
