@@ -14,6 +14,8 @@ pub struct Editor {
     pub mode: EditorMode,
     pub entries: Vec<crate::bib::BibEntry>,
     pub visual_anchor: Option<usize>,
+    pub history: Vec<(Rope, usize, EditorMode, Option<usize>)>,
+    pub redo_stack: Vec<(Rope, usize, EditorMode, Option<usize>)>,
 }
 
 #[allow(dead_code)]
@@ -25,6 +27,8 @@ impl Editor {
             mode: EditorMode::Normal,
             entries: Vec::new(),
             visual_anchor: None,
+            history: Vec::new(),
+            redo_stack: Vec::new(),
         }
     }
 
