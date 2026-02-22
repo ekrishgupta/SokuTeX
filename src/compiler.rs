@@ -9,7 +9,7 @@ use crate::config::CompileBackend;
 use crate::bib::BibParser;
 use std::hash::{Hash, Hasher};
 use std::collections::HashSet;
-use log::info;
+use log::{info, error};
 use rayon::prelude::*;
 
 use std::sync::OnceLock;
@@ -142,59 +142,74 @@ impl Compiler {
 
     fn compile_tectonic(&self, latex: &str) -> Result<Vec<u8>, Box<dyn Error>> {
         let temp_dir = std::env::temp_dir().join("sokutex_tectonic");
-        std::fs::create_dir_all(&temp_dir)?;
+        if !temp_dir.exists() {
+            std::fs::create_dir_all(&temp_dir)?;
+        }
         
         let file_path = temp_dir.join("main.tex");
         std::fs::write(&file_path, latex)?;
         
-        // Use persistent tectonic ProcessingSession to keep formats in memory
-        let mut guard = self.tectonic_session.lock().map_err(|e| format!("Lock error: {}", e))?;
-        if guard.is_none() {
-            let mut status = tectonic::status::NoopStatusBackend::default();
+        let mut manager = self.tectonic_manager.lock().map_err(|e| format!("Lock error: {}", e))?;
+        let mut status = NoopStatusBackend::default();
+
+        // 1. Ensure we have the persistent bundle and config
+        if manager.bundle.is_none() {
+            info!("Loading persistent Tectonic bundle and config...");
+            let config = PersistentConfig::open(false)?;
+            manager.bundle = Some(config.default_bundle(false, &mut status)?);
+            manager.format_cache_path = Some(config.format_cache_path()?);
+        }
+
+        // 2. Obtain or Create the Session
+        // If the session exists, we attempt to reuse it. If it doesn't, we create it.
+        // To be truly persistent, we should keep the same session object if the engine supports it.
+        if manager.session.is_none() {
+            let mut sb = ProcessingSessionBuilder::default();
             
-            // Try config, but some systems might fail to open default config,
-            // we will fallback if it fails.
-            let builder_res = tectonic::config::PersistentConfig::open(false)
-                .and_then(|config| {
-                   let bundle = config.default_bundle(false, &mut status)?;
-                   let format_cache_path = config.format_cache_path()?;
-                   
-                   let mut sb = tectonic::driver::ProcessingSessionBuilder::default();
-                   sb.bundle(bundle)
-                     .primary_input_path(&file_path)
-                     .tex_input_name("main.tex")
-                     .format_name("latex")
-                     .format_cache_path(format_cache_path)
-                     .keep_logs(false)
-                     .keep_intermediates(false)
-                     .print_stdout(false)
-                     .output_dir(&temp_dir)
-                     .output_format(tectonic::driver::OutputFormat::Pdf);
-                     
-                   sb.create(&mut status)
-                });
-            
-            if let Ok(sess) = builder_res {
-                *guard = Some(Box::new(sess));
-            } else {
-                // If the builder fails to create the session (missing config), fallback to command line.
-                use std::process::Command;
-                let output = Command::new("tectonic").arg(&file_path).output()?;
-                if !output.status.success() {
-                    return Err(format!("Tectonic fallback failed: {}", String::from_utf8_lossy(&output.stderr)).into());
+            // Use the shared bundle and configuration
+            // Note: Since sb.bundle() consumes the bundle, we need to be careful if we ever need to recreate.
+            // However, the goal is a persistent session.
+            if let Some(bundle) = manager.bundle.take() {
+                sb.bundle(bundle)
+                  .primary_input_path(&file_path)
+                  .tex_input_name("main.tex")
+                  .format_name("latex")
+                  .format_cache_path(manager.format_cache_path.as_ref().unwrap())
+                  .keep_logs(false)
+                  .keep_intermediates(false)
+                  .print_stdout(false)
+                  .output_dir(&temp_dir)
+                  .output_format(OutputFormat::Pdf);
+                  
+                match sb.create(&mut status) {
+                    Ok(sess) => {
+                        manager.session = Some(Box::new(sess));
+                    },
+                    Err(e) => {
+                        error!("Failed to create Tectonic session: {}", e);
+                        // Fallback to command line if session creation fails
+                        let output = std::process::Command::new("tectonic")
+                            .arg(&file_path)
+                            .output()?;
+                        if !output.status.success() {
+                            return Err(format!("Tectonic fallback failed: {}", String::from_utf8_lossy(&output.stderr)).into());
+                        }
+                        let pdf_path = temp_dir.join("main.pdf");
+                        return Ok(std::fs::read(pdf_path)?);
+                    }
                 }
-                let pdf_path = temp_dir.join("main.pdf");
-                return Ok(std::fs::read(pdf_path)?);
             }
         }
-        
-        if let Some(sess) = guard.as_mut() {
-            let mut status = tectonic::status::NoopStatusBackend::default();
+
+        // 3. Run the persistent session
+        if let Some(sess) = manager.session.as_mut() {
             if let Err(e) = sess.run(&mut status) {
-                 return Err(format!("Tectonic session failed: {}", e).into());
+                error!("Tectonic session run failed: {}. Recreating session next time.", e);
+                manager.session = None; // Reset so it recreates next time
+                return Err(format!("Tectonic session failed: {}", e).into());
             }
         }
-        
+
         let pdf_path = temp_dir.join("main.pdf");
         Ok(std::fs::read(pdf_path)?)
     }
