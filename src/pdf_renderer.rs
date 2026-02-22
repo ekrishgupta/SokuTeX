@@ -157,6 +157,18 @@ impl PdfRenderer {
         }
     }
 
+    fn convert_to_bgra(&self, samples: &[u8], width: u16, height: u16) -> Vec<u8> {
+        let mut bgra_samples = vec![255u8; width as usize * height as usize * 4];
+        bgra_samples.chunks_exact_mut(4)
+            .zip(samples.chunks_exact(3))
+            .for_each(|(bgra, rgb)| {
+                bgra[0] = rgb[2];
+                bgra[1] = rgb[1];
+                bgra[2] = rgb[0];
+            });
+        bgra_samples
+    }
+
     pub fn render_page(&self, pdf_data: &[u8], revision: u64, page_index: i32, width: u16, height: u16) -> Result<(Arc<Vec<u8>>, f32, f32), Box<dyn Error>> {
         // Create a unique key for this render
         let key = (revision, page_index, width, height);
