@@ -65,6 +65,7 @@ impl Editor {
                     // Escape
                     self.mode = EditorMode::Normal;
                 } else {
+                    self.snapshot();
                     self.insert_char(c);
                 }
             }
@@ -83,13 +84,19 @@ impl Editor {
             'j' => self.move_down(),
             'k' => self.move_up(),
             'l' => self.move_right(),
-            'x' => self.delete_char(),
+            'x' => {
+                self.snapshot();
+                self.delete_char();
+            }
             'a' => {
+                self.snapshot();
                 self.move_right();
                 self.mode = EditorMode::Insert;
             }
             '0' => self.move_to_line_start(),
             '$' => self.move_to_line_end(),
+            'u' => self.undo(),
+            'r' => self.redo(),
             _ => {}
         }
     }
@@ -106,6 +113,7 @@ impl Editor {
             'k' => self.move_up(),
             'l' => self.move_right(),
             'd' | 'x' => {
+                self.snapshot();
                 self.delete_selection();
                 self.mode = EditorMode::Normal;
                 self.visual_anchor = None;
@@ -225,6 +233,8 @@ impl Editor {
         if start_idx < self.cursor {
             let word: String = self.buffer.slice(start_idx..self.cursor).chars().collect();
             if let Some(snippet) = autocomplete.get_snippet(&word) {
+                self.snapshot();
+                
                 // Remove word
                 self.buffer.remove(start_idx..self.cursor);
                 self.cursor = start_idx;
