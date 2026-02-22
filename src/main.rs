@@ -76,7 +76,9 @@ async fn main() {
     let vfs_clone = vfs.clone();
     tokio::spawn(async move {
         let mut last_req = None;
-        let sleep = tokio::time::sleep(std::time::Duration::from_millis(150));
+        let mut last_compile_time: Option<tokio::time::Instant> = None;
+        let sleep_duration = std::time::Duration::from_millis(150);
+        let sleep = tokio::time::sleep(sleep_duration);
         tokio::pin!(sleep);
         
         loop {
@@ -84,23 +86,58 @@ async fn main() {
                 req = debounce_rx.recv() => {
                     match req {
                         Some(r) => {
-                            last_req = Some(r);
-                            sleep.as_mut().reset(tokio::time::Instant::now() + std::time::Duration::from_millis(150));
+                            let now = tokio::time::Instant::now();
+                            if last_compile_time.map_or(true, |t| now.duration_since(t) >= sleep_duration) {
+                                // Leading edge: trigger immediately
+                                last_compile_time = Some(now);
+                                
+                                let (text, backend, draft, focus_mode, active_file) = r.clone();
+                                let vfs_c = vfs_clone.clone();
+                                let ctx_c = compile_tx_clone.clone();
+                                let rtx_c = result_tx_clone.clone();
+                                
+                                tokio::spawn(async move {
+                                    vfs_c.write_file("main.tex", text.as_bytes().to_vec());
+                                    let dep_tree = crate::dependencies::DependencyScanner::scan("main.tex", &vfs_c);
+                                    let (otx, orx) = tokio::sync::oneshot::channel();
+                                    use crate::compiler_daemon::CompileRequest;
+                                    if ctx_c.send(CompileRequest::Compile { 
+                                        latex: text, 
+                                        backend, 
+                                        draft,
+                                        focus_mode,
+                                        active_file,
+                                        response: otx 
+                                    }).await.is_ok() {
+                                        if let Ok(res) = orx.await {
+                                            let _ = rtx_c.send((res, dep_tree)).await;
+                                        }
+                                    }
+                                });
+
+                                // Ensure we don't process it a second time as a trailing edge
+                                last_req = None; 
+                                sleep.as_mut().reset(now + sleep_duration);
+                            } else {
+                                // Debounce subsequent keystrokes
+                                last_req = Some(r);
+                                sleep.as_mut().reset(now + sleep_duration);
+                            }
                         }
                         None => break,
                     }
                 }
                 _ = &mut sleep, if last_req.is_some() => {
                     if let Some((text, backend, draft, focus_mode, active_file)) = last_req.take() {
+                        last_compile_time = Some(tokio::time::Instant::now());
+                        
                         let vfs_c = vfs_clone.clone();
                         let ctx_c = compile_tx_clone.clone();
                         let rtx_c = result_tx_clone.clone();
                         
                         tokio::spawn(async move {
-                            // Batch multiple file changes: update VFS and scan dependencies only when debounced
                             vfs_c.write_file("main.tex", text.as_bytes().to_vec());
                             let dep_tree = crate::dependencies::DependencyScanner::scan("main.tex", &vfs_c);
-                            
                             let (otx, orx) = tokio::sync::oneshot::channel();
                             use crate::compiler_daemon::CompileRequest;
                             if ctx_c.send(CompileRequest::Compile { 
@@ -112,7 +149,6 @@ async fn main() {
                                 response: otx 
                             }).await.is_ok() {
                                 if let Ok(res) = orx.await {
-                                    // Send result AND updated tree back to UI
                                     let _ = rtx_c.send((res, dep_tree)).await;
                                 }
                             }
