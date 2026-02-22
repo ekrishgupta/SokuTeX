@@ -215,7 +215,7 @@ impl Gui {
             self.compile_timer = std::time::Instant::now();
         }
         
-        if self.ui_text != self.last_compile_text && self.compile_timer.elapsed().as_millis() > 150 {
+        if self.ui_text != self.last_compile_text {
             self.compile_requested = true;
         }
         
