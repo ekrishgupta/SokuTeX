@@ -863,7 +863,95 @@ impl Gui {
                             let char_idx = cursor.ccursor.index;
                             
                             if char_idx <= self.ui_text.len() {
-                                // Logic for detection will go here in next commits
+                                let start_search = char_idx.saturating_sub(60);
+                                let prefix = &self.ui_text[start_search..char_idx];
+                                
+                                if let Some(slash_idx) = prefix.rfind('\\') {
+                                    let start = start_search + slash_idx;
+                                    
+                                    if !self.ui_text[start..char_idx].contains('}') {
+                                        if let Some(closing_idx) = self.ui_text[char_idx..].find('}') {
+                                            let end = char_idx + closing_idx + 1;
+                                            let hovered_text = &self.ui_text[start..end];
+                                            
+                                            if hovered_text.starts_with("\\cite{") {
+                                                let key = &hovered_text[6..hovered_text.len()-1];
+                                                if let Some(entry) = self.bib_entries.iter().find(|e| e.key == key) {
+                                                    egui::show_tooltip_at_pointer(ui.ctx(), resp.id.with("hover_cite"), |ui| {
+                                                        egui::Frame::none()
+                                                            .fill(Color32::from_rgb(25, 28, 35))
+                                                            .stroke(egui::Stroke::new(1.0, Color32::from_rgb(45, 50, 60)))
+                                                            .rounding(4.0)
+                                                            .inner_margin(egui::Margin::same(12.0))
+                                                            .show(ui, |ui| {
+                                                                ui.set_max_width(320.0);
+                                                                ui.label(RichText::new(entry.title.as_deref().unwrap_or("")).strong().color(Color32::WHITE));
+                                                                ui.add_space(4.0);
+                                                                ui.label(RichText::new(entry.author.as_deref().unwrap_or("")).color(Color32::from_rgb(150, 160, 170)));
+                                                                ui.add_space(8.0);
+                                                                ui.label(RichText::new(&entry.key).size(10.0).color(Color32::from_rgb(100, 110, 120)));
+                                                            });
+                                                    });
+                                                }
+                                            } else if hovered_text.starts_with("\\ref{") {
+                                                let label = &hovered_text[5..hovered_text.len()-1];
+                                                if let Some(ref vfs) = self.vfs {
+                                                    if !self.image_cache.contains_key(label) {
+                                                        let search_term = label.replace("fig:", "");
+                                                        let mut image_data = None;
+                                                        for entry in vfs.get_all_files().iter() {
+                                                            let file_name = entry.key();
+                                                            if (file_name.ends_with(".png") || file_name.ends_with(".jpg") || file_name.ends_with(".jpeg")) && file_name.contains(&search_term) {
+                                                                image_data = Some(entry.value().clone());
+                                                                break;
+                                                            }
+                                                        }
+                                                        
+                                                        let dummy_img = egui::ColorImage::from_rgba_unmultiplied([1, 1], &[0, 0, 0, 0]);
+                                                        let mut texture = ui.ctx().load_texture(format!("dummy_{}", label), dummy_img, egui::TextureOptions::LINEAR);
+                                                        
+                                                        if let Some(data) = image_data {
+                                                            if let Ok(img) = image::load_from_memory(&data) {
+                                                                let size = [img.width() as _, img.height() as _];
+                                                                let image_buffer = img.to_rgba8();
+                                                                let pixels = image_buffer.as_flat_samples();
+                                                                let slice = pixels.as_slice();
+                                                                let color_image = egui::ColorImage::from_rgba_unmultiplied(size, slice);
+                                                                texture = ui.ctx().load_texture(format!("img_{}", label), color_image, egui::TextureOptions::LINEAR);
+                                                            }
+                                                        }
+                                                        self.image_cache.insert(label.to_string(), texture);
+                                                    }
+                                                    
+                                                    if let Some(texture) = self.image_cache.get(label) {
+                                                        if texture.size() != [1, 1] { // not dummy
+                                                            egui::show_tooltip_at_pointer(ui.ctx(), resp.id.with("hover_ref"), |ui| {
+                                                                egui::Frame::none()
+                                                                    .fill(Color32::from_rgb(25, 28, 35))
+                                                                    .stroke(egui::Stroke::new(1.0, Color32::from_rgb(45, 50, 60)))
+                                                                    .rounding(4.0)
+                                                                    .inner_margin(egui::Margin::same(8.0))
+                                                                    .show(ui, |ui| {
+                                                                        let size = texture.size();
+                                                                        let aspect = size[0] as f32 / size[1] as f32;
+                                                                        let mut w = 250.0;
+                                                                        let mut h = w / aspect;
+                                                                        if h > 200.0 {
+                                                                            h = 200.0;
+                                                                            w = h * aspect;
+                                                                        }
+                                                                        ui.image(egui::load::SizedTexture::new(texture.id(), egui::vec2(w, h)));
+                                                                        ui.add_space(4.0);
+                                                                        ui.label(RichText::new(format!("Figure: {}", label)).size(10.0).color(Color32::from_rgb(150, 160, 170)));
+                                                                    });
+                                                            });
+                                                        }
+                                                    }
+                                                }
+                                            }
+                                        }
+                                    }
+                                }
                             }
                         }
                         if resp.double_clicked() {
