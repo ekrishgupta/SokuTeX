@@ -21,6 +21,7 @@ static BIBRESOURCE_REGEX: OnceLock<Regex> = OnceLock::new();
 
 use dashmap::DashMap;
 
+
 #[derive(Debug, Clone)]
 pub struct FileDelta {
     pub path: String,
@@ -29,6 +30,15 @@ pub struct FileDelta {
     pub content_size: usize,
 }
 
+pub struct TectonicSessionManager {
+    pub session: Option<Box<ProcessingSession>>,
+}
+
+impl TectonicSessionManager {
+    pub fn new() -> Self {
+        Self { session: None }
+    }
+}
 
 pub struct Compiler {
     cache: DashMap<u64, Vec<u8>>,
@@ -36,8 +46,7 @@ pub struct Compiler {
     file_hashes: DashMap<String, u64>,
     bib_cache: DashMap<String, (u64, Vec<String>)>,
     pub active_file: Option<String>,
-    #[allow(clippy::type_complexity)]
-    tectonic_session: std::sync::Mutex<Option<Box<tectonic::driver::ProcessingSession>>>,
+    tectonic_manager: std::sync::Mutex<TectonicSessionManager>,
 }
 
 impl Compiler {
@@ -48,7 +57,7 @@ impl Compiler {
             file_hashes: DashMap::new(),
             bib_cache: DashMap::new(),
             active_file: None,
-            tectonic_session: std::sync::Mutex::new(None),
+            tectonic_manager: std::sync::Mutex::new(TectonicSessionManager::new()),
         }
     }
 
