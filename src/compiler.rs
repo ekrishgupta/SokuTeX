@@ -33,6 +33,8 @@ pub struct Compiler {
     file_hashes: DashMap<String, u64>,
     bib_cache: DashMap<String, (u64, Vec<String>)>,
     pub active_file: Option<String>,
+    #[allow(clippy::type_complexity)]
+    tectonic_session: std::sync::Mutex<Option<Box<tectonic::driver::ProcessingSession>>>,
 }
 
 impl Compiler {
@@ -43,6 +45,7 @@ impl Compiler {
             file_hashes: DashMap::new(),
             bib_cache: DashMap::new(),
             active_file: None,
+            tectonic_session: std::sync::Mutex::new(None),
         }
     }
 
@@ -120,24 +123,58 @@ impl Compiler {
     }
 
     fn compile_tectonic(&self, latex: &str) -> Result<Vec<u8>, Box<dyn Error>> {
-        use std::process::Command;
-        use std::io::Write;
-        
-        // Tectonic: A complete, self-contained TeX/LaTeX engine
         let temp_dir = std::env::temp_dir().join("sokutex_tectonic");
         std::fs::create_dir_all(&temp_dir)?;
         
         let file_path = temp_dir.join("main.tex");
-        let mut file = std::fs::File::create(&file_path)?;
-        file.write_all(latex.as_bytes())?;
+        std::fs::write(&file_path, latex)?;
         
-        let output = Command::new("tectonic")
-            .arg(&file_path)
-            .output()?;
+        // Use persistent tectonic ProcessingSession to keep formats in memory
+        let mut guard = self.tectonic_session.lock().map_err(|e| format!("Lock error: {}", e))?;
+        if guard.is_none() {
+            let mut status = tectonic::status::NoopStatusBackend::default();
             
-        if !output.status.success() {
-            let stderr = String::from_utf8_lossy(&output.stderr);
-            return Err(format!("Tectonic compilation failed: {}", stderr).into());
+            // Try config, but some systems might fail to open default config,
+            // we will fallback if it fails.
+            let builder_res = tectonic::config::PersistentConfig::open(false)
+                .and_then(|config| {
+                   let bundle = config.default_bundle(false, &mut status)?;
+                   let format_cache_path = config.format_cache_path()?;
+                   
+                   let mut sb = tectonic::driver::ProcessingSessionBuilder::default();
+                   sb.bundle(bundle)
+                     .primary_input_path(&file_path)
+                     .tex_input_name("main.tex")
+                     .format_name("latex")
+                     .format_cache_path(format_cache_path)
+                     .keep_logs(false)
+                     .keep_intermediates(false)
+                     .print_stdout(false)
+                     .output_dir(&temp_dir)
+                     .output_format(tectonic::driver::OutputFormat::Pdf);
+                     
+                   sb.create(&mut status)
+                });
+            
+            if let Ok(sess) = builder_res {
+                *guard = Some(Box::new(sess));
+            } else {
+                // If the builder fails to create the session (missing config), fallback to command line.
+                use std::process::Command;
+                let output = Command::new("tectonic").arg(&file_path).output()?;
+                if !output.status.success() {
+                    return Err(format!("Tectonic fallback failed: {}", String::from_utf8_lossy(&output.stderr)).into());
+                }
+                let pdf_path = temp_dir.join("main.pdf");
+                return Ok(std::fs::read(pdf_path)?);
+            }
+        }
+        
+        if let Some(sess) = guard.as_mut() {
+            let mut status = tectonic::status::NoopStatusBackend::default();
+            if let Err(e) = sess.run(&mut status) {
+                 return Err(format!("Tectonic session failed: {}", e).into());
+            }
         }
         
         let pdf_path = temp_dir.join("main.pdf");
