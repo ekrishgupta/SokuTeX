@@ -1,4 +1,7 @@
 use std::error::Error;
+use tectonic::driver::{ProcessingSession, ProcessingSessionBuilder, OutputFormat};
+use tectonic::config::PersistentConfig;
+use tectonic::status::NoopStatusBackend;
 
 use regex::Regex;
 use crate::vfs::Vfs;
