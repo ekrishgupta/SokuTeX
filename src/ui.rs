@@ -57,8 +57,6 @@ pub struct Gui {
     pub show_command_palette: bool,
     pub command_search_text: String,
     pub last_compile_text: String,
-    pub prev_ui_text: String,
-    pub compile_timer: std::time::Instant,
     pub compile_requested: bool,
     pub autocomplete: crate::autocomplete::AutocompleteEngine,
     pub draft_mode: bool,
@@ -119,8 +117,6 @@ impl Gui {
             show_command_palette: false,
             command_search_text: String::new(),
             last_compile_text: String::new(),
-            prev_ui_text: String::new(),
-            compile_timer: std::time::Instant::now(),
             compile_requested: false,
             autocomplete: crate::autocomplete::AutocompleteEngine::new(),
             draft_mode: false,
@@ -211,15 +207,9 @@ impl Gui {
         }
 
         // Auto-Compile Detection (Near-instant latency)
-        if self.ui_text != self.prev_ui_text {
-            self.compile_timer = std::time::Instant::now();
-        }
-        
         if self.ui_text != self.last_compile_text {
             self.compile_requested = true;
         }
-        
-        self.prev_ui_text = self.ui_text.clone();
 
         match self.view {
             View::Dashboard => self.draw_dashboard(ctx),
