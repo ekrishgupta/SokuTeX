@@ -92,25 +92,31 @@ async fn main() {
                 }
                 _ = &mut sleep, if last_req.is_some() => {
                     if let Some((text, backend, draft, focus_mode, active_file)) = last_req.take() {
-                        // Batch multiple file changes: update VFS and scan dependencies only when debounced
-                        vfs_clone.write_file("main.tex", text.as_bytes().to_vec());
-                        let dep_tree = crate::dependencies::DependencyScanner::scan("main.tex", &vfs_clone);
+                        let vfs_c = vfs_clone.clone();
+                        let ctx_c = compile_tx_clone.clone();
+                        let rtx_c = result_tx_clone.clone();
                         
-                        let (otx, orx) = tokio::sync::oneshot::channel();
-                        use crate::compiler_daemon::CompileRequest;
-                        if compile_tx_clone.send(CompileRequest::Compile { 
-                            latex: text, 
-                            backend, 
-                            draft,
-                            focus_mode,
-                            active_file,
-                            response: otx 
-                        }).await.is_ok() {
-                            if let Ok(res) = orx.await {
-                                // Send result AND updated tree back to UI
-                                let _ = result_tx_clone.send((res, dep_tree)).await;
+                        tokio::spawn(async move {
+                            // Batch multiple file changes: update VFS and scan dependencies only when debounced
+                            vfs_c.write_file("main.tex", text.as_bytes().to_vec());
+                            let dep_tree = crate::dependencies::DependencyScanner::scan("main.tex", &vfs_c);
+                            
+                            let (otx, orx) = tokio::sync::oneshot::channel();
+                            use crate::compiler_daemon::CompileRequest;
+                            if ctx_c.send(CompileRequest::Compile { 
+                                latex: text, 
+                                backend, 
+                                draft,
+                                focus_mode,
+                                active_file,
+                                response: otx 
+                            }).await.is_ok() {
+                                if let Ok(res) = orx.await {
+                                    // Send result AND updated tree back to UI
+                                    let _ = rtx_c.send((res, dep_tree)).await;
+                                }
                             }
-                        }
+                        });
                     }
                 }
             }
