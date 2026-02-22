@@ -32,6 +32,31 @@ impl Editor {
         }
     }
 
+    pub fn snapshot(&mut self) {
+        self.history.push((self.buffer.clone(), self.cursor, self.mode, self.visual_anchor));
+        self.redo_stack.clear();
+    }
+
+    pub fn undo(&mut self) {
+        if let Some((buf, cur, mode, anchor)) = self.history.pop() {
+            self.redo_stack.push((self.buffer.clone(), self.cursor, self.mode, self.visual_anchor));
+            self.buffer = buf;
+            self.cursor = cur;
+            self.mode = mode;
+            self.visual_anchor = anchor;
+        }
+    }
+
+    pub fn redo(&mut self) {
+        if let Some((buf, cur, mode, anchor)) = self.redo_stack.pop() {
+            self.history.push((self.buffer.clone(), self.cursor, self.mode, self.visual_anchor));
+            self.buffer = buf;
+            self.cursor = cur;
+            self.mode = mode;
+            self.visual_anchor = anchor;
+        }
+    }
+
     pub fn handle_key(&mut self, c: char) {
         match self.mode {
             EditorMode::Normal => self.handle_normal_key(c),
