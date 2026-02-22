@@ -5,7 +5,8 @@ use dashmap::DashMap;
 use std::sync::Arc;
 use ahash::RandomState;
 use log::info;
-
+use lru::LruCache;
+use std::num::NonZeroUsize;
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub struct Rect {
     pub x: f32,
@@ -89,7 +90,7 @@ unsafe impl Send for SendDisplayList {}
 
 pub struct PdfRenderer {
     // Cache for rendered pixmaps: (revision, page, width, height)
-    cache: Arc<DashMap<(u64, i32, u16, u16), Arc<Vec<u8>>, RandomState>>,
+    cache: Arc<Mutex<LruCache<(u64, i32, u16, u16), Arc<Vec<u8>>>>>,
     // Cache for interpreted display lists to avoid re-parsing the page
     #[allow(dead_code)]
     dl_cache: DashMap<(u64, i32), Arc<SendDisplayList>, RandomState>,
@@ -100,7 +101,7 @@ pub struct PdfRenderer {
 impl PdfRenderer {
     pub fn new() -> Result<Self, Box<dyn Error>> {
         Ok(Self {
-            cache: Arc::new(DashMap::with_hasher(RandomState::new())),
+            cache: Arc::new(Mutex::new(LruCache::new(NonZeroUsize::new(100).unwrap()))),
             dl_cache: DashMap::with_hasher(RandomState::new()),
             doc_cache: DashMap::with_hasher(RandomState::new()),
             render_queue: Mutex::new(TileRenderQueue::new()),
@@ -166,8 +167,8 @@ impl PdfRenderer {
         let pw = bounds.width();
         let ph = bounds.height();
 
-        if let Some(cached) = self.cache.get(&key) {
-            return Ok((cached.value().clone(), pw, ph));
+        if let Some(cached) = self.cache.lock().unwrap().get(&key) {
+            return Ok((cached.clone(), pw, ph));
         }
 
         let scale_x = width as f32 / pw;
@@ -189,7 +190,7 @@ impl PdfRenderer {
         });
         
         let arc_samples = Arc::new(bgra_samples);
-        self.cache.insert(key, arc_samples.clone());
+        self.cache.lock().unwrap().put(key, arc_samples.clone());
         Ok((arc_samples, pw, ph))
     }
 }
