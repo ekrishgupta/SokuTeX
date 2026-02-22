@@ -147,17 +147,22 @@ impl PdfRenderer {
 
 
 
+    fn get_document(&self, pdf_data: &[u8], revision: u64) -> Result<Arc<Mutex<SendDocument>>, Box<dyn Error>> {
+        if let Some(doc) = self.doc_cache.get(&revision) {
+            Ok(doc.value().clone())
+        } else {
+            let doc = Arc::new(Mutex::new(SendDocument(Document::from_bytes(pdf_data, "")?)));
+            self.doc_cache.insert(revision, doc.clone());
+            Ok(doc)
+        }
+    }
+
     pub fn render_page(&self, pdf_data: &[u8], revision: u64, page_index: i32, width: u16, height: u16) -> Result<(Arc<Vec<u8>>, f32, f32), Box<dyn Error>> {
         // Create a unique key for this render
         let key = (revision, page_index, width, height);
         
-        let document_arc = if let Some(doc) = self.doc_cache.get(&revision) {
-            doc.value().clone()
-        } else {
-            let doc = Arc::new(Mutex::new(SendDocument(Document::from_bytes(pdf_data, "")?)));
-            self.doc_cache.insert(revision, doc.clone());
-            doc
-        };
+        let document_arc = self.get_document(pdf_data, revision)?;
+
 
         // We need to load the page anyway to get bounds if not cached? 
         // Actually, let's keep it simple.
