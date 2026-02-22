@@ -32,11 +32,17 @@ pub struct FileDelta {
 
 pub struct TectonicSessionManager {
     pub session: Option<Box<ProcessingSession>>,
+    pub bundle: Option<Box<dyn tectonic::io::Bundle + Send>>,
+    pub format_cache_path: Option<std::path::PathBuf>,
 }
 
 impl TectonicSessionManager {
     pub fn new() -> Self {
-        Self { session: None }
+        Self { 
+            session: None,
+            bundle: None,
+            format_cache_path: None,
+        }
     }
 }
 
