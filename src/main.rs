@@ -92,6 +92,7 @@ async fn main() {
     let compile_tx_clone = compile_tx.clone();
     let result_tx_clone = result_tx.clone();
     let vfs_clone = vfs.clone();
+    let mfn_debounce = main_file_name.clone();
     tokio::spawn(async move {
         let mut last_req = None;
         let mut last_compile_time: Option<tokio::time::Instant> = None;
@@ -99,11 +100,12 @@ async fn main() {
         let sleep = tokio::time::sleep(sleep_duration);
         tokio::pin!(sleep);
         
-        let trigger_compile = |r: (String, crate::config::CompileBackend, bool, bool, Option<String>), vfs: std::sync::Arc<crate::vfs::Vfs>, ctx: tokio::sync::mpsc::Sender<crate::compiler_daemon::CompileRequest>, rtx: tokio::sync::mpsc::Sender<(crate::compiler_daemon::CompileResult, crate::dependencies::DependencyNode)>| {
+        let trigger_compile = |r: (String, crate::config::CompileBackend, bool, bool, Option<String>), vfs: std::sync::Arc<crate::vfs::Vfs>, ctx: tokio::sync::mpsc::Sender<crate::compiler_daemon::CompileRequest>, rtx: tokio::sync::mpsc::Sender<(crate::compiler_daemon::CompileResult, crate::dependencies::DependencyNode)>, mfn: String| {
             let (text, backend, draft, focus_mode, active_file) = r;
             tokio::spawn(async move {
-                vfs.write_file("main.tex", text.as_bytes().to_vec());
-                let dep_tree = crate::dependencies::DependencyScanner::scan("main.tex", &vfs);
+                let write_path = active_file.clone().unwrap_or_else(|| mfn.clone());
+                vfs.write_file(&write_path, text.as_bytes().to_vec());
+                let dep_tree = crate::dependencies::DependencyScanner::scan(&mfn, &vfs);
                 let (otx, orx) = tokio::sync::oneshot::channel();
                 if ctx.send(crate::compiler_daemon::CompileRequest::Compile { 
                     latex: text, 
@@ -129,7 +131,7 @@ async fn main() {
                             if last_compile_time.map_or(true, |t| now.duration_since(t) >= sleep_duration) {
                                 // Leading-edge: trigger immediately
                                 last_compile_time = Some(now);
-                                trigger_compile(r, vfs_clone.clone(), compile_tx_clone.clone(), result_tx_clone.clone());
+                                trigger_compile(r, vfs_clone.clone(), compile_tx_clone.clone(), result_tx_clone.clone(), mfn_debounce.clone());
                                 last_req = None; 
                                 sleep.as_mut().reset(now + sleep_duration);
                             } else {
@@ -141,10 +143,10 @@ async fn main() {
                         None => break,
                     }
                 }
-                _ = &mut sleep, if last_req.is_some() => {
+                () = &mut sleep => {
                     if let Some(r) = last_req.take() {
                         last_compile_time = Some(tokio::time::Instant::now());
-                        trigger_compile(r, vfs_clone.clone(), compile_tx_clone.clone(), result_tx_clone.clone());
+                        trigger_compile(r, vfs_clone.clone(), compile_tx_clone.clone(), result_tx_clone.clone(), mfn_debounce.clone());
                     }
                 }
             }
