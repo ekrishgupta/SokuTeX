@@ -340,6 +340,58 @@ impl<'a> State<'a> {
     }
 
     pub fn update_texture(&mut self, width: u32, height: u32, data: &[u8]) {
+        let create_new = match &self.pdf_texture {
+            Some(tex) => tex.width() != width || tex.height() != height,
+            None => true,
+        };
+
+        if create_new {
+            let texture_size = wgpu::Extent3d {
+                width,
+                height,
+                depth_or_array_layers: 1,
+            };
+            let texture = self.device.create_texture(&wgpu::TextureDescriptor {
+                size: texture_size,
+                mip_level_count: 1,
+                sample_count: 1,
+                dimension: wgpu::TextureDimension::D2,
+                format: wgpu::TextureFormat::Bgra8Unorm,
+                usage: wgpu::TextureUsages::TEXTURE_BINDING | wgpu::TextureUsages::COPY_DST,
+                label: Some("pdf_texture"),
+                view_formats: &[],
+            });
+
+            let texture_view = texture.create_view(&wgpu::TextureViewDescriptor::default());
+            let sampler = self.device.create_sampler(&wgpu::SamplerDescriptor {
+                address_mode_u: wgpu::AddressMode::ClampToEdge,
+                address_mode_v: wgpu::AddressMode::ClampToEdge,
+                address_mode_w: wgpu::AddressMode::ClampToEdge,
+                mag_filter: wgpu::FilterMode::Linear,
+                min_filter: wgpu::FilterMode::Linear,
+                mipmap_filter: wgpu::FilterMode::Linear,
+                ..Default::default()
+            });
+
+            self.bind_group = self.device.create_bind_group(&wgpu::BindGroupDescriptor {
+                layout: &self.texture_bind_group_layout,
+                entries: &[
+                    wgpu::BindGroupEntry {
+                        binding: 0,
+                        resource: wgpu::BindingResource::TextureView(&texture_view),
+                    },
+                    wgpu::BindGroupEntry {
+                        binding: 1,
+                        resource: wgpu::BindingResource::Sampler(&sampler),
+                    },
+                ],
+                label: Some("pdf_bind_group"),
+            });
+
+            self.pdf_view = Some(texture_view);
+            self.pdf_texture = Some(texture);
+        }
+
         self.update_texture_region(0, 0, width, height, data);
     }
 
