@@ -1,6 +1,9 @@
 use std::error::Error;
+#[cfg(feature = "tectonic-backend")]
 use tectonic::driver::{ProcessingSession, ProcessingSessionBuilder, OutputFormat};
+#[cfg(feature = "tectonic-backend")]
 use tectonic::config::PersistentConfig;
+#[cfg(feature = "tectonic-backend")]
 use tectonic::status::NoopStatusBackend;
 
 use regex::Regex;
@@ -9,7 +12,7 @@ use crate::config::CompileBackend;
 use crate::bib::BibParser;
 use std::hash::{Hash, Hasher};
 use std::collections::HashSet;
-use log::{info, error};
+use log::info;
 use rayon::prelude::*;
 
 use std::sync::OnceLock;
@@ -30,12 +33,14 @@ pub struct FileDelta {
     pub content_size: usize,
 }
 
+#[cfg(feature = "tectonic-backend")]
 pub struct TectonicSessionManager {
     pub session: Option<Box<ProcessingSession>>,
     pub bundle: Option<Box<dyn tectonic::io::Bundle + Send>>,
     pub format_cache_path: Option<std::path::PathBuf>,
 }
 
+#[cfg(feature = "tectonic-backend")]
 impl TectonicSessionManager {
     pub fn new() -> Self {
         Self { 
@@ -52,6 +57,7 @@ pub struct Compiler {
     file_hashes: DashMap<String, u64>,
     bib_cache: DashMap<String, (u64, Vec<String>)>,
     pub active_file: Option<String>,
+    #[cfg(feature = "tectonic-backend")]
     tectonic_manager: std::sync::Mutex<TectonicSessionManager>,
 }
 
@@ -63,6 +69,7 @@ impl Compiler {
             file_hashes: DashMap::new(),
             bib_cache: DashMap::new(),
             active_file: None,
+            #[cfg(feature = "tectonic-backend")]
             tectonic_manager: std::sync::Mutex::new(TectonicSessionManager::new()),
         }
     }
@@ -141,7 +148,21 @@ impl Compiler {
     }
 
     fn compile_tectonic(&self, latex: &str) -> Result<Vec<u8>, Box<dyn Error>> {
-        let temp_dir = std::env::temp_dir().join("sokutex_tectonic");
+        #[cfg(feature = "tectonic-backend")]
+        {
+            let res = self.compile_tectonic_lib(latex);
+            if res.is_ok() {
+                return res;
+            }
+            info!("Tectonic library backend failed or not available, falling back to CLI");
+        }
+        
+        self.compile_tectonic_cli(latex)
+    }
+
+    #[cfg(feature = "tectonic-backend")]
+    fn compile_tectonic_lib(&self, latex: &str) -> Result<Vec<u8>, Box<dyn Error>> {
+        let temp_dir = std::env::temp_dir().join("sokutex_tectonic_lib");
         if !temp_dir.exists() {
             std::fs::create_dir_all(&temp_dir)?;
         }
@@ -161,14 +182,9 @@ impl Compiler {
         }
 
         // 2. Obtain or Create the Session
-        // If the session exists, we attempt to reuse it. If it doesn't, we create it.
-        // To be truly persistent, we should keep the same session object if the engine supports it.
         if manager.session.is_none() {
             let mut sb = ProcessingSessionBuilder::default();
             
-            // Use the shared bundle and configuration
-            // Note: Since sb.bundle() consumes the bundle, we need to be careful if we ever need to recreate.
-            // However, the goal is a persistent session.
             if let Some(bundle) = manager.bundle.take() {
                 sb.bundle(bundle)
                   .primary_input_path(&file_path)
@@ -187,15 +203,7 @@ impl Compiler {
                     },
                     Err(e) => {
                         error!("Failed to create Tectonic session: {}", e);
-                        // Fallback to command line if session creation fails
-                        let output = std::process::Command::new("tectonic")
-                            .arg(&file_path)
-                            .output()?;
-                        if !output.status.success() {
-                            return Err(format!("Tectonic fallback failed: {}", String::from_utf8_lossy(&output.stderr)).into());
-                        }
-                        let pdf_path = temp_dir.join("main.pdf");
-                        return Ok(std::fs::read(pdf_path)?);
+                        return Err(e.into());
                     }
                 }
             }
@@ -208,6 +216,29 @@ impl Compiler {
                 manager.session = None; // Reset so it recreates next time
                 return Err(format!("Tectonic session failed: {}", e).into());
             }
+        }
+
+        let pdf_path = temp_dir.join("main.pdf");
+        Ok(std::fs::read(pdf_path)?)
+    }
+
+    fn compile_tectonic_cli(&self, latex: &str) -> Result<Vec<u8>, Box<dyn Error>> {
+        let temp_dir = std::env::temp_dir().join("sokutex_tectonic_cli");
+        if !temp_dir.exists() {
+            std::fs::create_dir_all(&temp_dir)?;
+        }
+        
+        let file_path = temp_dir.join("main.tex");
+        std::fs::write(&file_path, latex)?;
+
+        let output = std::process::Command::new("tectonic")
+            .arg("-o")
+            .arg(&temp_dir)
+            .arg(&file_path)
+            .output()?;
+
+        if !output.status.success() {
+            return Err(format!("Tectonic CLI failed: {}", String::from_utf8_lossy(&output.stderr)).into());
         }
 
         let pdf_path = temp_dir.join("main.pdf");
@@ -229,9 +260,6 @@ impl Compiler {
         }
 
         // 2. Track changes across the entire dependency tree
-        
-        // This is a bit expensive but necessary for "affected subtree" logic
-        // We could optimize by only scanning if we haven't scanned recently
         let mut all_known_files = Vec::new();
         self.collect_all_dependencies("main.tex", vfs, &mut all_known_files, &mut HashSet::new());
 
@@ -307,11 +335,9 @@ impl Compiler {
             let active_base = active.strip_suffix(".tex").unwrap_or(active);
             if top_level_units.iter().any(|u| u == active_base) {
                 if focus_mode {
-                    // Power User Focus Mode: Ignore other changes, focus only on active unit + bibliography
                     info!("Focus Mode: concentrating on unit {}", active_base);
                     affected_units = vec![active_base.to_string()];
 
-                    // Auto-include bibliography units if they exist
                     for unit in &top_level_units {
                         let unit_path = if unit.ends_with(".tex") { unit.clone() } else { format!("{}.tex", unit) };
                         if let Some(content) = vfs.read_file(&unit_path) {
@@ -325,7 +351,6 @@ impl Compiler {
                         }
                     }
                 } else {
-                    // Standard Incremental: If we are actively editing an include unit, it's the primary candidate for includeonly
                     if !affected_units.contains(&active_base.to_string()) {
                         affected_units.push(active_base.to_string());
                     }
@@ -337,9 +362,6 @@ impl Compiler {
         let mut optimized_latex = latex.to_string();
         let mut is_incremental = false;
 
-        // Only inject if we have a subset of units affected
-        // If everything changed or nothing changed (first compile), we don't necessarily want \includeonly
-        // unless we want to force focus on what the user is editing.
         if !affected_units.is_empty() && affected_units.len() < top_level_units.len() {
             let include_only = format!("\\includeonly{{{}}}\n", affected_units.join(","));
             if let Some(pos) = optimized_latex.find("\\begin{document}") {
@@ -432,7 +454,7 @@ impl Compiler {
             1 0 obj <</Type /Catalog /Pages 2 0 R>> endobj\n\
             2 0 obj <</Type /Pages /Kids [3 0 R] /Count 1>> endobj\n\
             3 0 obj <</Type /Page /Parent 2 0 R /Resources 4 0 R /MediaBox [0 0 595 842] /Contents 5 0 R>> endobj\n\
-            4 0 obj <</Font <</F1 <</Type /Font /Subtype /Type1 /BaseFont /Helvetica>>>> >> endobj\n\
+            4 0 obj <</Font <</F1 <</Type /Font /Subtype /Type1 /BaseFont /Helvetica>>>>>> endobj\n\
             5 0 obj <</Length {}>> stream\n\
             {}\n\
             endstream endobj\n\
@@ -464,7 +486,7 @@ impl Compiler {
             1 0 obj <</Type /Catalog /Pages 2 0 R>> endobj\n\
             2 0 obj <</Type /Pages /Kids [3 0 R] /Count 1>> endobj\n\
             3 0 obj <</Type /Page /Parent 2 0 R /Resources 4 0 R /MediaBox [0 0 595 842] /Contents 5 0 R>> endobj\n\
-            4 0 obj <</Font <</F1 <</Type /Font /Subtype /Type1 /BaseFont /Helvetica>>>> >> endobj\n\
+            4 0 obj <</Font <</F1 <</Type /Font /Subtype /Type1 /BaseFont /Helvetica>>>>>> endobj\n\
             5 0 obj <</Length {}>> stream\n\
             {}\n\
             endstream endobj\n\
