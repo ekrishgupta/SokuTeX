@@ -1,0 +1,99 @@
+\documentclass{beamer}
+\usetheme{Madrid}
+\usecolortheme{whale}
+
+\usepackage{amsmath}
+\usepackage{graphicx}
+
+\title{SokuTeX Beamer Test}
+\subtitle{Testing Presentation Mode}
+\author{Krish Gupta}
+\institute{SokuTeX Labs}
+\date{\today}
+
+\begin{document}
+
+\begin{frame}
+\titlepage
+\end{frame}
+
+\begin{frame}{Outline}
+\tableofcontents
+\end{frame}
+
+\section{Introduction}
+
+\begin{frame}{What is SokuTeX?}
+\begin{itemize}
+    \item A native LaTeX editor written in Rust
+    \item GPU-accelerated PDF preview with wgpu
+    \item Real-time compilation with multiple backends
+    \item SyncTeX support for bidirectional navigation
+\end{itemize}
+\end{frame}
+
+\section{Features}
+
+\begin{frame}{Architecture}
+\begin{block}{Compilation Pipeline}
+    Editor $\to$ VFS $\to$ Compiler $\to$ PDF Renderer $\to$ GPU
+\end{block}
+
+\begin{alertblock}{Performance}
+    Near-instant feedback via shadow rendering
+\end{alertblock}
+
+\begin{exampleblock}{Math Support}
+    Full $\LaTeX$ math: $\int_0^\infty e^{-x^2} dx = \frac{\sqrt{\pi}}{2}$
+\end{exampleblock}
+\end{frame}
+
+\begin{frame}{Incremental Compilation}
+\begin{columns}
+\column{0.5\textwidth}
+    \textbf{Traditional}
+    \begin{enumerate}
+        \item Edit file
+        \item Recompile everything
+        \item Wait 5-10s
+        \item View PDF
+    \end{enumerate}
+
+\column{0.5\textwidth}
+    \textbf{SokuTeX}
+    \begin{enumerate}
+        \item Edit file
+        \item Detect changed subtree
+        \item Recompile \textit{only} changes
+        \item View in $<$150ms
+    \end{enumerate}
+\end{columns}
+\end{frame}
+
+\section{Results}
+
+\begin{frame}{Benchmark}
+\begin{table}
+\centering
+\begin{tabular}{lcc}
+\hline
+\textbf{Editor} & \textbf{Compile Time} & \textbf{Memory} \\
+\hline
+Overleaf   & 8.2s  & N/A \\
+TeXShop    & 5.1s  & 120MB \\
+\textbf{SokuTeX} & \textbf{0.15s} & \textbf{45MB} \\
+\hline
+\end{tabular}
+\end{table}
+\end{frame}
+
+\begin{frame}
+\centering
+\Huge Thank You!
+
+\vspace{1cm}
+\normalsize
+Questions?
+\end{frame}
+
+\end{document}

@@ -1,0 +1,95 @@
+\documentclass[letterpaper]{article}
+\usepackage{amsmath, amssymb, amsthm}
+\usepackage{mathtools}
+\usepackage{bm}
+
+\title{Heavy Math Stress Test}
+\author{SokuTeX Test Suite}
+
+\begin{document}
+\maketitle
+
+\section{Calculus}
+\[
+    \int_{-\infty}^{\infty} e^{-x^2} \, dx = \sqrt{\pi}
+\]
+
+\[
+    \frac{d}{dx}\left[\int_{a(x)}^{b(x)} f(t, x)\, dt\right] =
+    f(b(x), x) b'(x) - f(a(x), x) a'(x) + \int_{a(x)}^{b(x)} \frac{\partial}{\partial x} f(t, x)\, dt
+\]
+
+\section{Linear Algebra}
+\[
+    \det(A) = \sum_{\sigma \in S_n} \text{sgn}(\sigma) \prod_{i=1}^n a_{i, \sigma(i)}
+\]
+
+\[
+    \begin{pmatrix}
+        a_{11} & a_{12} & \cdots & a_{1n} \\
+        a_{21} & a_{22} & \cdots & a_{2n} \\
+        \vdots & \vdots & \ddots & \vdots \\
+        a_{n1} & a_{n2} & \cdots & a_{nn}
+    \end{pmatrix}
+    \begin{pmatrix} x_1 \\ x_2 \\ \vdots \\ x_n \end{pmatrix}
+    =
+    \begin{pmatrix} b_1 \\ b_2 \\ \vdots \\ b_n \end{pmatrix}
+\]
+
+\section{Differential Equations}
+The heat equation:
+\[
+    \frac{\partial u}{\partial t} = \alpha \nabla^2 u
+\]
+
+General solution via Fourier series:
+\[
+    u(x, t) = \sum_{n=1}^{\infty} B_n \sin\left(\frac{n\pi x}{L}\right) e^{-\alpha (n\pi/L)^2 t}
+\]
+
+\section{Probability \& Statistics}
+Bayes' theorem:
+\[
+    P(A \mid B) = \frac{P(B \mid A) \, P(A)}{P(B)}
+    = \frac{P(B \mid A) \, P(A)}{\sum_{i} P(B \mid A_i) P(A_i)}
+\]
+
+The multivariate Gaussian:
+\[
+    f(\bm{x}) = \frac{1}{(2\pi)^{k/2} |\bm{\Sigma}|^{1/2}}
+    \exp\left(-\frac{1}{2}(\bm{x} - \bm{\mu})^T \bm{\Sigma}^{-1} (\bm{x} - \bm{\mu})\right)
+\]
+
+\section{Number Theory}
+Euler's totient function:
+\[
+    \phi(n) = n \prod_{p \mid n} \left(1 - \frac{1}{p}\right)
+\]
+
+The Riemann zeta function:
+\[
+    \zeta(s) = \sum_{n=1}^{\infty} \frac{1}{n^s}
+    = \prod_{p \text{ prime}} \frac{1}{1 - p^{-s}}
+    \qquad \text{for } \Re(s) > 1
+\]
+
+\section{Nested Environments Stress}
+\begin{theorem}
+For all $\epsilon > 0$, there exists $\delta > 0$ such that
+\[
+    |x - a| < \delta \implies |f(x) - f(a)| < \epsilon
+\]
+\end{theorem}
+
+\begin{proof}
+Choose $\delta = \min\left\{1, \frac{\epsilon}{2M}\right\}$ where $M = \sup_{|x-a| \leq 1} |f'(x)|$.
+Then by the mean value theorem:
+\begin{align*}
+    |f(x) - f(a)| &= |f'(\xi)||x - a| \\
+                   &\leq M \cdot \delta \\
+                   &\leq M \cdot \frac{\epsilon}{2M} \\
+                   &= \frac{\epsilon}{2} < \epsilon. \qedhere
+\end{align*}
+\end{proof}
+
+\end{document}

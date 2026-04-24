@@ -1,0 +1,24 @@
+\documentclass[12pt]{article}
+\usepackage{amsmath, amssymb, amsthm}
+\usepackage{graphicx}
+\usepackage{hyperref}
+
+\input{sections/preamble}
+
+\title{Multi-File Project: Research Paper}
+\author{Krish Gupta}
+\date{\today}
+
+\begin{document}
+\maketitle
+\tableofcontents
+\newpage
+
+\include{sections/introduction}
+\include{sections/methodology}
+\include{sections/results}
+
+\bibliography{references}
+\bibliographystyle{plain}
+
+\end{document}

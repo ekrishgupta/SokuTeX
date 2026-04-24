@@ -1,0 +1,47 @@
+\section{Methodology}
+\label{sec:methods}
+
+\subsection{Algorithm Description}
+We propose a modified gradient descent algorithm with the following update rule:
+\begin{align}
+    x_{k+1} &= x_k - \alpha_k \nabla f(x_k) \label{eq:update} \\
+    \alpha_k &= \frac{2}{L + \mu} \label{eq:stepsize}
+\end{align}
+
+where $\alpha_k$ is the adaptive step size chosen according to the
+Barzilai-Borwein method~\cite{barzilai1988}.
+
+\subsection{Convergence Analysis}
+\begin{lemma}[Descent Lemma]
+\label{lem:descent}
+For any $L$-smooth function $f$ and any $x, y \in \R^n$:
+\[
+    f(y) \leq f(x) + \langle \nabla f(x), y - x \rangle + \frac{L}{2} \norm{y - x}^2
+\]
+\end{lemma}
+
+\begin{definition}[Strong Convexity]
+A function $f: \R^n \to \R$ is $\mu$-strongly convex if for all $x, y \in \R^n$:
+\[
+    f(y) \geq f(x) + \langle \nabla f(x), y - x \rangle + \frac{\mu}{2} \norm{y - x}^2
+\]
+\end{definition}
+
+\subsection{Implementation Details}
+The algorithm was implemented in Python using NumPy for matrix operations.
+Key parameters:
+\begin{table}[h]
+\centering
+\begin{tabular}{lcc}
+\hline
+\textbf{Parameter} & \textbf{Symbol} & \textbf{Value} \\
+\hline
+Learning rate    & $\alpha$ & $10^{-3}$   \\
+Momentum         & $\beta$  & $0.9$       \\
+Batch size       & $B$      & $64$        \\
+Max iterations   & $K$      & $10{,}000$  \\
+\hline
+\end{tabular}
+\caption{Hyperparameter settings}
+\label{tab:params}
+\end{table}

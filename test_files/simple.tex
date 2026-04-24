@@ -1,0 +1,63 @@
+\documentclass{article}
+\usepackage{amsmath}
+\usepackage{amssymb}
+
+\title{SokuTeX Simple Test}
+\author{Test Author}
+\date{\today}
+
+\begin{document}
+\maketitle
+
+\section{Introduction}
+This is a simple test document for SokuTeX. It contains basic LaTeX features to verify
+that the editor correctly handles syntax highlighting, auto-compile, and PDF preview.
+
+\section{Mathematics}
+Here is the quadratic formula:
+\[
+x = \frac{-b \pm \sqrt{b^2 - 4ac}}{2a}
+\]
+
+And an inline equation: $E = mc^2$.
+
+An aligned environment:
+\begin{align}
+    \nabla \cdot \mathbf{E} &= \frac{\rho}{\epsilon_0} \label{eq:gauss} \\
+    \nabla \cdot \mathbf{B} &= 0 \\
+    \nabla \times \mathbf{E} &= -\frac{\partial \mathbf{B}}{\partial t} \\
+    \nabla \times \mathbf{B} &= \mu_0 \mathbf{J} + \mu_0 \epsilon_0 \frac{\partial \mathbf{E}}{\partial t}
+\end{align}
+
+\section{Lists}
+\begin{itemize}
+    \item First item with \textbf{bold text}
+    \item Second item with \textit{italic text}
+    \item Third item with \texttt{monospace text}
+\end{itemize}
+
+\begin{enumerate}
+    \item Numbered item one
+    \item Numbered item two
+    \item Numbered item three
+\end{enumerate}
+
+\section{Table}
+\begin{table}[h]
+\centering
+\begin{tabular}{|l|c|r|}
+\hline
+\textbf{Left} & \textbf{Center} & \textbf{Right} \\
+\hline
+Alpha & 1 & 0.001 \\
+Beta  & 2 & 0.042 \\
+Gamma & 3 & 1.337 \\
+\hline
+\end{tabular}
+\caption{A simple test table}
+\label{tab:test}
+\end{table}
+
+See Table~\ref{tab:test} and Equation~\ref{eq:gauss}.
+
+\end{document}

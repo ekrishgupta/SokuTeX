@@ -1,0 +1,37 @@
+\section{Results}
+\label{sec:results}
+
+\subsection{Benchmark Comparison}
+We evaluated our method on three standard benchmarks. The results are summarized
+in Table~\ref{tab:results}.
+
+\begin{table}[h]
+\centering
+\begin{tabular}{lccc}
+\hline
+\textbf{Method} & \textbf{MNIST} & \textbf{CIFAR-10} & \textbf{ImageNet} \\
+\hline
+SGD              & 98.2\%  & 91.3\%  & 74.1\% \\
+Adam             & 98.5\%  & 92.1\%  & 75.3\% \\
+\textbf{Ours}    & \textbf{98.9\%} & \textbf{93.7\%} & \textbf{76.8\%} \\
+\hline
+\end{tabular}
+\caption{Test accuracy comparison across benchmarks}
+\label{tab:results}
+\end{table}
+
+\subsection{Convergence Rate}
+As predicted by Theorem~\ref{thm:main}, our method exhibits linear convergence
+with rate $\kappa = L/\mu$. The empirical convergence matches the theoretical
+bound closely:
+\[
+    \frac{\norm{x_k - x^*}}{\norm{x_0 - x^*}} \approx \left(1 - \frac{1}{\kappa}\right)^k
+\]
+
+\subsection{Discussion}
+The improvement over standard SGD is consistent across all datasets, confirming
+the theoretical advantage of the adaptive step size selection (see
+Equations~\ref{eq:update}--\ref{eq:stepsize} and Table~\ref{tab:params}).
+
+Our results align with the findings of Brown et al.~\cite{brown2021}, who
+observed similar patterns in the convex setting.

@@ -55,13 +55,31 @@ fn render_pdf(
 async fn main() {
     env_logger::init();
     
-    // Initialize VFS
-    let vfs = std::sync::Arc::new(vfs::Vfs::new());
-    vfs.write_file("main.tex", b"\\documentclass{article}\n\\input{sections/intro}\n\\include{sections/chapter1}\n\\begin{document}\nHello SokuTeX!\n\\end{document}".to_vec());
-    vfs.write_file("sections/intro.tex", b"\\section{Introduction}\nThis is a multi-file project.".to_vec());
-    vfs.write_file("sections/chapter1.tex", b"\\section{Chapter 1}\n\\input{sections/details}\nMore content here.".to_vec());
-    vfs.write_file("sections/details.tex", b"Detailed explanation...".to_vec());
-    vfs.write_file("references.bib", b"@article{einstein1905,\n  author = {Einstein, Albert},\n  title = {On the Electrodynamics of Moving Bodies},\n  journal = {Annalen der Physik},\n  year = {1905}\n}\n@book{knuth1984,\n  author = {Knuth, Donald E.},\n  title = {The TeXbook},\n  year = {1984},\n  publisher = {Addison-Wesley}\n}".to_vec());
+    // Initialize VFS — load from CLI arg or use built-in demo
+    let mut vfs_inner = vfs::Vfs::new();
+    let args: Vec<String> = std::env::args().collect();
+    let main_file_name;
+    
+    if args.len() > 1 {
+        // Load real files from disk
+        let path = &args[1];
+        vfs_inner.load_directory(path);
+        
+        // Determine the main file name
+        let p = std::path::Path::new(path);
+        if p.is_file() {
+            main_file_name = p.file_name().unwrap().to_string_lossy().to_string();
+        } else {
+            // Look for main.tex in the directory
+            main_file_name = "main.tex".to_string();
+        }
+    } else {
+        // Built-in demo content
+        main_file_name = "main.tex".to_string();
+        vfs_inner.write_file("main.tex", b"\\documentclass{article}\n\\usepackage{amsmath}\n\n\\title{SokuTeX Demo}\n\\author{SokuTeX}\n\\date{\\today}\n\n\\begin{document}\n\\maketitle\n\n\\section{Welcome}\nWelcome to SokuTeX! Start typing LaTeX here.\n\nHere is some math: $E = mc^2$\n\n\\[\n    \\int_0^\\infty e^{-x^2}\\, dx = \\frac{\\sqrt{\\pi}}{2}\n\\]\n\n\\section{Features}\n\\begin{itemize}\n    \\item Real-time preview\n    \\item Syntax highlighting\n    \\item Auto-compile on keystroke\n    \\item Multi-file project support\n\\end{itemize}\n\n\\end{document}\n".to_vec());
+        vfs_inner.write_file("references.bib", b"@article{einstein1905,\n  author = {Einstein, Albert},\n  title = {On the Electrodynamics of Moving Bodies},\n  journal = {Annalen der Physik},\n  year = {1905}\n}\n@book{knuth1984,\n  author = {Knuth, Donald E.},\n  title = {The TeXbook},\n  year = {1984},\n  publisher = {Addison-Wesley}\n}".to_vec());
+    }
+    let vfs = std::sync::Arc::new(vfs_inner);
 
     // Start Compiler Daemon
     let (compile_tx, compile_rx) = tokio::sync::mpsc::channel(10);
@@ -188,16 +206,18 @@ async fn main() {
     gui.refresh_bibliography(bib_contents);
 
     let mut editor = editor::Editor::new();
-    if let Some(content) = vfs.read_file("main.tex") {
+    gui.active_file_path = main_file_name.clone();
+    if let Some(content) = vfs.read_file(&main_file_name) {
         gui.ui_text = String::from_utf8_lossy(&content).to_string();
         editor.buffer = ropey::Rope::from_str(&gui.ui_text);
         
         let dtx = dep_tx.clone();
         let rtx = compile_tx.clone();
+        let mfn = main_file_name.clone();
         tokio::spawn(async move {
             let (otx, orx) = tokio::sync::oneshot::channel();
             let _ = rtx.send(crate::compiler_daemon::CompileRequest::ScanDependencies {
-                main_file: "main.tex".to_string(),
+                main_file: mfn,
                 response: otx,
             }).await;
             if let Ok(tree) = orx.await {
