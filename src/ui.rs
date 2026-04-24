@@ -83,6 +83,7 @@ pub struct Gui {
     pub pdf_pan: egui::Vec2,
     pub vfs: Option<std::sync::Arc<crate::vfs::Vfs>>,
     pub image_cache: std::collections::HashMap<String, egui::TextureHandle>,
+    pub prev_ui_text: String,
 }
 
 impl Gui {
@@ -121,7 +122,7 @@ impl Gui {
             autocomplete: crate::autocomplete::AutocompleteEngine::new(),
             draft_mode: false,
             focus_mode: false,
-            compile_backend: crate::config::CompileBackend::Internal,
+            compile_backend: crate::config::CompileBackend::Tectonic,
             dependency_tree: None,
             show_dependencies: true,
             show_bib_panel: false,
@@ -141,6 +142,7 @@ impl Gui {
             pdf_pan: egui::vec2(0.0, 0.0),
             vfs: None,
             image_cache: std::collections::HashMap::new(),
+            prev_ui_text: String::new(),
         }
     }
 
