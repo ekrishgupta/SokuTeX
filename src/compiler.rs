@@ -445,8 +445,9 @@ impl Compiler {
     fn compile_internal(&self, latex: &str) -> Result<Vec<u8>, Box<dyn Error>> {
         // Fast Internal Mock Engine (Aesthetic representation)
         let lines: Vec<String> = latex.lines().take(60).map(|s| s.to_string()).collect();
-        let content_stream = lines.iter().enumerate().map(|(_i, line)| {
-            format!("BT /F1 10 Td ({}) Tj ET", line.replace("(", "\\(").replace(")", "\\)"))
+        let content_stream = lines.iter().enumerate().map(|(i, line)| {
+            let y_pos = 800 - (i * 12);
+            format!("BT /F1 10 Tf 50 {} Td ({}) Tj ET", y_pos, line.replace("(", "\\(").replace(")", "\\)").replace("\\", "\\\\"))
         }).collect::<Vec<_>>().join("\n");
 
         let pdf = format!(
